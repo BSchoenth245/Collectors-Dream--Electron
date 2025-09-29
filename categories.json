@@ -1,10 +1,10 @@
 {
-    "pokemon": {
-        "name": "pokemon",
+    "test": {
+        "name": "test",
         "fields": [
             {
-                "name": "name",
-                "label": "name",
+                "name": "test",
+                "label": "test",
                 "type": "text"
             }
         ]

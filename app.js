@@ -717,7 +717,9 @@ function confirmDeleteCategory(strCategoryKey) {
 
 // Delete category and optionally its items
 function deleteCategoryAndItems(strCategoryKey, boolDeleteItems) {
-    const strCategoryName = objCategories[strCategoryKey].name;
+    const objCategory = objCategories[strCategoryKey];
+    const strCategoryName = objCategory.name;
+    const arrCategoryFields = objCategory.fields ? objCategory.fields.map(objF => objF.name) : [];
     
     // Delete category
     fetch(`http://127.0.0.1:8000/api/categories/${strCategoryKey}`, {
@@ -732,8 +734,6 @@ function deleteCategoryAndItems(strCategoryKey, boolDeleteItems) {
         
         if (boolDeleteItems) {
             // Delete associated items
-            const objCategory = objCategories[strCategoryKey] || { fields: [] };
-            const arrCategoryFields = objCategory.fields ? objCategory.fields.map(objF => objF.name) : [];
             
             fetch('http://127.0.0.1:8000/api/collection')
             .then(response => response.json())
