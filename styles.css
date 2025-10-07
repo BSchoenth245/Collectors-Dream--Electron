@@ -71,6 +71,11 @@ body {
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
     border: 1px solid var(--border-light);
+    transition: transform 0.3s ease;
+}
+
+body.panel-open .container {
+    transform: translateX(-100px);
 }
 
 .header {
@@ -669,4 +674,129 @@ body.dark-mode .dataTables_wrapper .dataTables_paginate {
 body.dark-mode .dataTables_wrapper .dataTables_length label,
 body.dark-mode .dataTables_wrapper .dataTables_filter label {
     color: #f1f5f9 !important;
+}
+
+/* Slide-out Panel Styles */
+.slide-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    background: var(--card-gradient);
+    border-left: 1px solid var(--border-light);
+    box-shadow: -4px 0 12px rgba(124, 58, 237, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1050;
+    overflow-y: auto;
+}
+
+.slide-panel.open {
+    right: 0;
+}
+
+.slide-panel-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--primary-gradient);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slide-panel-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.slide-panel-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.slide-panel-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.slide-panel-content {
+    padding: 20px;
+}
+
+.slide-panel-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-light);
+    background: var(--background-light);
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.field-display {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: var(--background-light);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+}
+
+.field-label {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+}
+
+.field-value {
+    color: var(--text-dark);
+    font-size: 16px;
+    word-wrap: break-word;
+}
+
+.field-value.boolean-yes {
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+.field-value.boolean-no {
+    color: var(--text-muted);
+}
+
+.field-value.empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Dark mode overrides for slide panel */
+body.dark-mode .slide-panel {
+    background: var(--card-gradient);
+    border-left-color: var(--border-light);
+}
+
+body.dark-mode .slide-panel-header {
+    border-bottom-color: var(--border-light);
+}
+
+body.dark-mode .slide-panel-footer {
+    background: var(--background-light);
+    border-top-color: var(--border-light);
+}
+
+body.dark-mode .field-display {
+    background: var(--background-white);
+    border-color: var(--border-light);
 }

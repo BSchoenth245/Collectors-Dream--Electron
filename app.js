@@ -87,14 +87,20 @@ function initializeDataTable(arrData) {
         render: function(data, type, row) {
             console.log('Rendering actions for row:', row._id);
             return `
-                <button class="btn btn-sm btn-primary me-1" onclick="editRecord('${row._id}')">Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteRecord('${row._id}')">Delete</button>
+                <button class="btn btn-sm btn-primary" onclick="viewRecord('${row._id}')">View</button>
             `;
         }
     });
     
     try {
         console.log('Attempting to initialize DataTable with columns:', arrColumns);
+        
+        // Ensure table element exists and is properly structured
+        const elmTable = document.getElementById('dataTable');
+        if (!elmTable) {
+            throw new Error('Table element not found');
+        }
+        
         // Initialize DataTable
         objDataTable = $('#dataTable').DataTable({
             data: arrData,
@@ -107,7 +113,8 @@ function initializeDataTable(arrData) {
                 emptyTable: "No data available",
                 zeroRecords: "No matching records found"
             },
-            destroy: true
+            destroy: true,
+            autoWidth: false
         });
         console.log('DataTable initialized successfully');
     } catch (error) {
@@ -151,8 +158,7 @@ function createBasicTable(arrData, arrHeaders) {
         // Actions cell
         const elmActionsCell = document.createElement('td');
         elmActionsCell.innerHTML = `
-            <button class="btn btn-sm btn-primary me-1" onclick="editRecord('${objItem._id}')">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteRecord('${objItem._id}')">Delete</button>
+            <button class="btn btn-sm btn-primary" onclick="viewRecord('${objItem._id}')">View</button>
         `;
         elmRow.appendChild(elmActionsCell);
         elmTbody.appendChild(elmRow);
@@ -163,48 +169,58 @@ function createBasicTable(arrData, arrHeaders) {
 // === DOM INITIALIZATION ===
 // Ensure DOM is loaded and jQuery is available
 $(document).ready(function() {
-    // Initialize DataTable when page loads
-    fetchAndDisplayData();
+    // Show empty table message instead of loading all data
+    showEmptyTable();
 });
 
 // Fallback for non-jQuery environments
 document.addEventListener('DOMContentLoaded', () => {
-    // Wait a bit for scripts to load, then initialize
+    // Show empty table message instead of loading all data
     setTimeout(() => {
-        if (typeof fetchAndDisplayData === 'function') {
-            fetchAndDisplayData();
+        if (typeof showEmptyTable === 'function') {
+            showEmptyTable();
         }
     }, 500);
 });
 
+// Show empty table with instruction message
+function showEmptyTable() {
+    const elmTable = document.getElementById('dataTable');
+    elmTable.innerHTML = '<thead><tr><th>Select a Category</th></tr></thead><tbody><tr><td>Please select a category from the dropdown above to view records</td></tr></tbody>';
+}
+
 // === TABLE MANAGEMENT ===
 // Refresh table data
 function refreshTable() {
-    fetchAndDisplayData();
+    // Check if we're on the search tab and respect the current filter state
+    const elmSearchTab = document.getElementById('search-tab');
+    const elmCategorySelect = document.getElementById('searchCategorySelect');
+    
+    if (elmSearchTab && elmSearchTab.classList.contains('active')) {
+        // We're on search tab - respect the category filter
+        if (elmCategorySelect && elmCategorySelect.value) {
+            filterByCategory();
+        } else {
+            showEmptyTable();
+        }
+    } else {
+        // We're not on search tab - safe to load all data
+        fetchAndDisplayData();
+    }
 }
 
-// Edit specific record by ID
-function editRecord(strId) {
+// View specific record by ID
+function viewRecord(strId) {
     console.log('Fetching record with ID:', strId);
-    // Fetch the record data
     fetch(`http://127.0.0.1:8000/api/collection/${strId}`)
     .then(response => {
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        return response.text();
+        return response.json();
     })
-    .then(text => {
-        console.log('Response text:', text);
-        try {
-            const objRecord = JSON.parse(text);
-            showEditModal(objRecord);
-        } catch (parseError) {
-            console.error('JSON parse error:', parseError);
-            throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-        }
+    .then(objRecord => {
+        showViewPanel(objRecord);
     })
     .catch(error => {
         console.error('Error fetching record:', error);
@@ -212,60 +228,48 @@ function editRecord(strId) {
     });
 }
 
-// Show edit modal with record data
-function showEditModal(objRecord) {
+// === SLIDE PANEL FUNCTIONS ===
+let currentRecord = null;
+let isEditMode = false;
+
+// Show view panel with record data
+function showViewPanel(objRecord) {
+    currentRecord = objRecord;
+    isEditMode = false;
+    
     const strCategory = objRecord.category;
     const objCategory = objCategories[strCategory];
     const strCategoryName = objCategory ? objCategory.name : 'Item';
     
-    // Create modal HTML
-    const strModalHtml = `
-        <div class="modal fade" id="editModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Edit ${strCategoryName}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="editForm">
-                            <input type="hidden" id="editRecordId" value="${objRecord._id}">
-                            <div id="editFormFields"></div>
-                        </form>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" onclick="updateRecord()">Save Changes</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+    // Update panel title
+    document.getElementById('slidePanelTitle').textContent = `View ${strCategoryName}`;
     
-    // Remove existing modal if any
-    const elmExistingModal = document.getElementById('editModal');
-    if (elmExistingModal) {
-        // Properly dispose of Bootstrap modal instance
-        const existingModalInstance = bootstrap.Modal.getInstance(elmExistingModal);
-        if (existingModalInstance) {
-            existingModalInstance.dispose();
-        }
-        elmExistingModal.remove();
-    }
+    // Populate content in view mode
+    populatePanelContent(objRecord, false);
     
-    // Also remove any backdrop that might be left behind
-    const elmBackdrop = document.querySelector('.modal-backdrop');
-    if (elmBackdrop) {
-        elmBackdrop.remove();
-    }
+    // Show view mode buttons
+    showViewModeButtons();
     
-    // Add modal to page
-    document.body.insertAdjacentHTML('beforeend', strModalHtml);
+    // Open panel
+    document.getElementById('slidePanel').classList.add('open');
+    document.body.classList.add('panel-open');
     
-    // Populate form fields - show ALL fields from the record
-    const elmFormFields = document.getElementById('editFormFields');
+    // Add click outside handler
+    setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+    }, 100);
+}
+
+// Populate panel content (view or edit mode)
+function populatePanelContent(objRecord, boolEditMode) {
+    const elmContent = document.getElementById('slidePanelContent');
+    elmContent.innerHTML = '';
     
-    // Get all fields from the record (excluding MongoDB internal fields)
+    // Get category info
+    const strCategory = objRecord.category;
+    const objCategory = objCategories[strCategory];
+    
+    // Create fields
     Object.keys(objRecord).forEach(strFieldName => {
         if (strFieldName === '_id' || strFieldName === '__v' || strFieldName === 'category') {
             return; // Skip internal fields
@@ -273,9 +277,8 @@ function showEditModal(objRecord) {
         
         const currentValue = objRecord[strFieldName];
         const elmFieldDiv = document.createElement('div');
-        elmFieldDiv.className = 'mb-3';
         
-        // Try to get field definition from category, fallback to auto-detect type
+        // Get field definition
         let objFieldDef = null;
         if (objCategory && objCategory.fields) {
             objFieldDef = objCategory.fields.find(f => f.name === strFieldName);
@@ -284,49 +287,121 @@ function showEditModal(objRecord) {
         const strFieldType = objFieldDef ? objFieldDef.type : (typeof currentValue === 'boolean' ? 'boolean' : typeof currentValue === 'number' ? 'number' : 'text');
         const strFieldLabel = objFieldDef ? objFieldDef.label : strFieldName.charAt(0).toUpperCase() + strFieldName.slice(1);
         
-        if (strFieldType === 'boolean') {
-            const boolChecked = currentValue ? 'checked' : '';
-            elmFieldDiv.innerHTML = `
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" name="${strFieldName}" id="edit_${strFieldName}" ${boolChecked}>
-                    <label class="form-check-label" for="edit_${strFieldName}">${strFieldLabel}</label>
-                </div>
-            `;
+        if (boolEditMode) {
+            // Edit mode - show form inputs
+            elmFieldDiv.className = 'mb-3';
+            
+            if (strFieldType === 'boolean') {
+                const boolChecked = currentValue ? 'checked' : '';
+                elmFieldDiv.innerHTML = `
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" name="${strFieldName}" id="edit_${strFieldName}" ${boolChecked}>
+                        <label class="form-check-label" for="edit_${strFieldName}">${strFieldLabel}</label>
+                    </div>
+                `;
+            } else {
+                const strInputType = strFieldType === 'number' ? 'text' : 'text';
+                const strInputPattern = strFieldType === 'number' ? 'pattern="[0-9]*"' : '';
+                const strValue = currentValue || '';
+                elmFieldDiv.innerHTML = `
+                    <label class="form-label">${strFieldLabel}:</label>
+                    <input type="${strInputType}" ${strInputPattern} class="form-control" name="${strFieldName}" value="${strValue}" required>
+                `;
+            }
         } else {
-            const strInputType = strFieldType === 'number' ? 'text' : 'text';
-            const strInputPattern = strFieldType === 'number' ? 'pattern="[0-9]*"' : '';
-            const strValue = currentValue || '';
+            // View mode - show formatted display
+            elmFieldDiv.className = 'field-display';
+            
+            let strDisplayValue;
+            let strValueClass = 'field-value';
+            
+            if (currentValue === null || currentValue === undefined || currentValue === '') {
+                strDisplayValue = 'Not set';
+                strValueClass += ' empty';
+            } else if (typeof currentValue === 'boolean') {
+                strDisplayValue = currentValue ? 'Yes' : 'No';
+                strValueClass += currentValue ? ' boolean-yes' : ' boolean-no';
+            } else {
+                strDisplayValue = currentValue.toString();
+            }
+            
             elmFieldDiv.innerHTML = `
-                <label class="form-label">${strFieldLabel}:</label>
-                <input type="${strInputType}" ${strInputPattern} class="form-control" name="${strFieldName}" value="${strValue}" required>
+                <div class="field-label">${strFieldLabel}</div>
+                <div class="${strValueClass}">${strDisplayValue}</div>
             `;
         }
-        elmFormFields.appendChild(elmFieldDiv);
+        
+        elmContent.appendChild(elmFieldDiv);
     });
-    
-    // Show modal with proper cleanup handling
-    const elmModalElement = document.getElementById('editModal');
-    const elmModal = new bootstrap.Modal(elmModalElement);
-    
-    // Add cleanup when modal is closed via cancel/X button
-    elmModalElement.addEventListener('hidden.bs.modal', function() {
-        elmModal.dispose();
-        elmModalElement.remove();
-        // Remove any leftover backdrop
-        const elmBackdrop = document.querySelector('.modal-backdrop');
-        if (elmBackdrop) {
-            elmBackdrop.remove();
-        }
-    }, { once: true });
-    
-    elmModal.show();
 }
 
-// Update record with new data
-function updateRecord() {
-    const strRecordId = document.getElementById('editRecordId').value;
-    const elmFormFields = document.getElementById('editFormFields');
-    const elmInputs = elmFormFields.querySelectorAll('input');
+// Show view mode buttons
+function showViewModeButtons() {
+    const elmFooter = document.getElementById('slidePanelFooter');
+    elmFooter.innerHTML = `
+        <button class="btn btn-secondary" onclick="editCurrentRecord(event)">Edit</button>
+        <button class="btn btn-danger" onclick="deleteCurrentRecord(event)">Delete</button>
+    `;
+}
+
+// Show edit mode buttons
+function showEditModeButtons() {
+    const elmFooter = document.getElementById('slidePanelFooter');
+    elmFooter.innerHTML = `
+        <button class="btn btn-secondary" onclick="cancelEdit(event)">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCurrentRecord(event)">Save Changes</button>
+    `;
+}
+
+// Switch to edit mode
+function editCurrentRecord(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!currentRecord) return;
+    
+    isEditMode = true;
+    
+    // Update title
+    const strCategory = currentRecord.category;
+    const objCategory = objCategories[strCategory];
+    const strCategoryName = objCategory ? objCategory.name : 'Item';
+    document.getElementById('slidePanelTitle').textContent = `Edit ${strCategoryName}`;
+    
+    // Switch to edit mode
+    populatePanelContent(currentRecord, true);
+    showEditModeButtons();
+}
+
+// Cancel edit and return to view mode
+function cancelEdit(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!currentRecord) return;
+    
+    isEditMode = false;
+    
+    // Update title
+    const strCategory = currentRecord.category;
+    const objCategory = objCategories[strCategory];
+    const strCategoryName = objCategory ? objCategory.name : 'Item';
+    document.getElementById('slidePanelTitle').textContent = `View ${strCategoryName}`;
+    
+    // Switch back to view mode
+    populatePanelContent(currentRecord, false);
+    showViewModeButtons();
+}
+
+// Save current record changes
+function saveCurrentRecord(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!currentRecord) return;
+    
+    const elmContent = document.getElementById('slidePanelContent');
+    const elmInputs = elmContent.querySelectorAll('input');
     const objData = {};
     
     elmInputs.forEach(elmInput => {
@@ -344,7 +419,7 @@ function updateRecord() {
     });
     
     // Send update request
-    fetch(`http://127.0.0.1:8000/api/collection/${strRecordId}`, {
+    fetch(`http://127.0.0.1:8000/api/collection/${currentRecord._id}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -357,26 +432,16 @@ function updateRecord() {
         }
         return response.json();
     })
-    .then(() => {
-        // Close and cleanup modal
-        const elmModalElement = document.getElementById('editModal');
-        const elmModal = bootstrap.Modal.getInstance(elmModalElement);
-        if (elmModal) {
-            elmModal.hide();
-            // Clean up after modal is hidden
-            elmModalElement.addEventListener('hidden.bs.modal', function() {
-                elmModal.dispose();
-                elmModalElement.remove();
-                // Remove any leftover backdrop
-                const elmBackdrop = document.querySelector('.modal-backdrop');
-                if (elmBackdrop) {
-                    elmBackdrop.remove();
-                }
-            }, { once: true });
-        }
+    .then(objUpdatedRecord => {
+        // Update current record
+        currentRecord = { ...currentRecord, ...objData };
+        
+        // Switch back to view mode
+        cancelEdit();
         
         // Refresh table
-        refreshTable();
+        filterByCategory();
+        
         Swal.fire('Success!', 'Record updated successfully', 'success');
     })
     .catch(error => {
@@ -385,28 +450,98 @@ function updateRecord() {
     });
 }
 
-// Delete specific record by ID
-function deleteRecord(strId) {
-    fetch(`http://127.0.0.1:8000/api/collection/${strId}`, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
+// Delete current record
+function deleteCurrentRecord(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!currentRecord || !currentRecord._id) {
+        console.error('No current record or missing ID:', currentRecord);
+        Swal.fire('Error!', 'Cannot delete record - missing record ID', 'error');
+        return;
+    }
+    
+    console.log('Deleting record with ID:', currentRecord._id);
+    
+    Swal.fire({
+        title: 'Delete Record?',
+        text: 'This action cannot be undone!',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const recordId = currentRecord._id;
+            console.log('Confirmed deletion of record:', recordId);
+            
+            fetch(`http://127.0.0.1:8000/api/collection/${recordId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => {
+                console.log('Delete response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then((result) => {
+                console.log('Delete successful:', result);
+                closeSlidePanel();
+                // Refresh the current filtered view
+                const elmCategorySelect = document.getElementById('searchCategorySelect');
+                if (elmCategorySelect && elmCategorySelect.value) {
+                    filterByCategory();
+                } else {
+                    showEmptyTable();
+                }
+                Swal.fire('Deleted!', 'Record has been deleted.', 'success');
+            })
+            .catch(error => {
+                console.error('Error deleting record:', error);
+                Swal.fire('Error!', 'Error deleting record: ' + error.message, 'error');
+            });
         }
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        return response.json();
-    })
-    .then(() => {
-        fetchAndDisplayData(); // Refresh the table
-        Swal.fire('Success!', 'Record deleted successfully', 'success');
-    })
-    .catch(error => {
-        console.error('Error deleting record:', error);
-        Swal.fire('Error!', 'Error deleting record: ' + error.message, 'error');
     });
+}
+
+// Handle click outside panel
+function handleClickOutside(event) {
+    const elmPanel = document.getElementById('slidePanel');
+    // Don't close if clicking inside the panel or on panel buttons
+    if (elmPanel && !elmPanel.contains(event.target)) {
+        closeSlidePanel();
+    }
+}
+
+// Close slide panel
+function closeSlidePanel() {
+    document.getElementById('slidePanel').classList.remove('open');
+    document.body.classList.remove('panel-open');
+    document.removeEventListener('click', handleClickOutside);
+    currentRecord = null;
+    isEditMode = false;
+}
+
+// Legacy function for compatibility
+function showEditModal(objRecord) {
+    // Redirect to new slide panel system
+    showViewPanel(objRecord);
+}
+
+// Legacy functions - now handled by slide panel
+function updateRecord() {
+    // Redirect to slide panel system
+    console.log('updateRecord called - now handled by slide panel');
+}
+
+function deleteRecord(strId) {
+    // Redirect to slide panel system
+    console.log('deleteRecord called - now handled by slide panel');
 }
 
 // === CATEGORY MANAGEMENT ===
@@ -573,7 +708,7 @@ function submitCategoryData() {
                 elmInput.value = '';
             }
         });
-        refreshTable();
+        // Don't refresh table - let user manually select category in search tab
     })
     .catch(error => {
         Swal.fire('Error!', 'Error saving data: ' + error.message, 'error');
@@ -947,7 +1082,10 @@ function saveNewCategory() {
     .then(objResult => {
         objCategories[strCategoryKey] = objNewCategory;
         populateCategoryDropdowns();
-        cancelAddCategory();
+        
+        // Clear form fields but keep form open
+        document.getElementById('newCategoryName').value = '';
+        document.getElementById('newCategoryFields').innerHTML = '';
         Swal.fire('Success!', 'Category saved successfully!', 'success');
     })
     .catch(error => {
@@ -962,8 +1100,8 @@ function filterByCategory() {
     const strSelectedCategory = elmCategorySelect.value;
     
     if (!strSelectedCategory) {
-        // Show all data if no category selected
-        fetchAndDisplayData();
+        // Show empty table if no category selected
+        showEmptyTable();
         return;
     }
     

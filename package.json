@@ -1,18 +1,18 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "collectors-dream",
-  "version": "1.1.2",
+  "version": "1.1.6",
   "description": "A database management system for collectors",
   "main": "main.js",
   "scripts": {
     "start": "node start-app.js",
     "desktop": "electron .",
     "setup": "node setup.js",
-    "build": "electron-builder --win --linux",
-    "build-win": "electron-builder --win",
-    "build-linux": "electron-builder --linux",
-    "release": "electron-builder --win --linux --publish=always"
-
+    "clean": "node clean-for-release.js",
+    "build": "npm run clean && electron-builder --win --linux",
+    "build-win": "npm run clean && electron-builder --win",
+    "build-linux": "npm run clean && electron-builder --linux",
+    "release": "npm run clean && electron-builder --win --linux --publish=always"
   },
   "author": {
     "name": "Brock Schoenthlaer",
