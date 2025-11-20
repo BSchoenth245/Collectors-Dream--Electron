@@ -1016,23 +1016,36 @@ function saveEditCategory() {
         fields: arrFields
     };
     
-    // Save to server
-    fetch('http://127.0.0.1:8000/api/categories', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ key: strCategoryKey, category: objUpdatedCategory })
-    })
-    .then(response => response.json())
-    .then(objResult => {
-        objCategories[strCategoryKey] = objUpdatedCategory;
-        populateCategoryDropdowns();
-        cancelEditCategory();
-        Swal.fire('Success!', 'Category updated successfully!', 'success');
-    })
-    .catch(error => {
-        Swal.fire('Error!', 'Error updating category: ' + error.message, 'error');
+    // Ask user about migrating existing items
+    Swal.fire({
+        title: 'Update Existing Items?',
+        text: 'Do you want to update existing items to match the new category structure?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, update items',
+        cancelButtonText: 'No, keep items as-is'
+    }).then((result) => {
+        const boolMigrate = result.isConfirmed;
+        
+        // Save to server
+        fetch('http://127.0.0.1:8000/api/categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ key: strCategoryKey, category: objUpdatedCategory, migrate: boolMigrate })
+        })
+        .then(response => response.json())
+        .then(objResult => {
+            objCategories[strCategoryKey] = objUpdatedCategory;
+            populateCategoryDropdowns();
+            cancelEditCategory();
+            const strMessage = boolMigrate ? 'Category and existing items updated!' : 'Category updated!';
+            Swal.fire('Success!', strMessage, 'success');
+        })
+        .catch(error => {
+            Swal.fire('Error!', 'Error updating category: ' + error.message, 'error');
+        });
     });
 }
 

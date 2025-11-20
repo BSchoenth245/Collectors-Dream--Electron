@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const intPort = 8000;
+const intPort = process.env.PORT || 8000;
 
 // === MIDDLEWARE ===
 app.use(cors());
@@ -126,18 +126,54 @@ app.get('/api/categories', (req, res) => {
     }
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
     try {
         const strCategoriesPath = path.join(__dirname, 'categories.json');
         const objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
-        const { key: strKey, category: objCategory } = req.body;
+        const { key: strKey, category: objCategory, migrate = false } = req.body;
+        
+        const objOldCategory = objCategories[strKey];
         objCategories[strKey] = objCategory;
         fs.writeFileSync(strCategoriesPath, JSON.stringify(objCategories, null, 4));
+        
+        if (migrate && objOldCategory) {
+            await migrateCategoryItems(strKey, objOldCategory, objCategory);
+        }
+        
         res.json({ message: 'Category saved successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
+
+async function migrateCategoryItems(strCategoryKey, objOldCategory, objNewCategory) {
+    const arrItems = await Data.find({ category: strCategoryKey });
+    
+    for (const objItem of arrItems) {
+        const objUpdates = {};
+        
+        // Add new fields with default values
+        objNewCategory.fields.forEach(objNewField => {
+            if (!objItem.hasOwnProperty(objNewField.name)) {
+                objUpdates[objNewField.name] = objNewField.type === 'boolean' ? false : 
+                                              objNewField.type === 'number' ? 0 : '';
+            }
+        });
+        
+        // Remove fields no longer in category
+        const arrNewFieldNames = objNewCategory.fields.map(f => f.name);
+        Object.keys(objItem.toObject()).forEach(strFieldName => {
+            if (strFieldName !== '_id' && strFieldName !== '__v' && strFieldName !== 'category' && 
+                !arrNewFieldNames.includes(strFieldName)) {
+                objUpdates[strFieldName] = undefined;
+            }
+        });
+        
+        if (Object.keys(objUpdates).length > 0) {
+            await Data.findByIdAndUpdate(objItem._id, { $unset: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v === undefined)), $set: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v !== undefined)) });
+        }
+    }
+}
 
 app.delete('/api/categories/:key', (req, res) => {
     try {
@@ -181,14 +217,33 @@ app.post('/api/settings', (req, res) => {
 });
 
 // === STATIC FILES (AFTER ALL API ROUTES) ===
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, {
+    setHeaders: (res, path) => {
+        console.log('Serving static file:', path);
+    }
+}));
 
 // === ROOT ROUTE (LAST) ===
 app.get('/', (req, res) => {
+    console.log('Serving index.html');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start server
-app.listen(intPort, () => {
-    console.log(`Server running on port ${intPort}`);
+// Catch-all route for debugging
+app.get('*', (req, res) => {
+    console.log('404 - Route not found:', req.url);
+    res.status(404).send('Not Found: ' + req.url);
 });
+
+// Start server
+if (!module.parent) {
+    app.listen(intPort, () => {
+        console.log(`Server running on port ${intPort}`);
+    });
+} else {
+    // When required by Electron
+    const server = app.listen(intPort, () => {
+        console.log(`Server running on port ${intPort}`);
+    });
+    module.exports = server;
+}

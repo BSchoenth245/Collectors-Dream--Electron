@@ -39,25 +39,17 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false, // Allow localhost requests
-            cache: false // Disable caching
+            webSecurity: false,
+            cache: false
         },
         icon: path.join(__dirname, 'assets', 'colored-logo.png')
     });
 
-    // Start the Express server
+    // Start the Express server (it will handle loading the URL)
     startServer();
-
-    // Load the app
-    setTimeout(() => {
-        objMainWindow.loadURL('http://localhost:8000');
-    }, 2000);
 
     objMainWindow.on('closed', () => {
         objMainWindow = null;
-        if (objServer) {
-            objServer.close();
-        }
     });
 }
 
@@ -84,188 +76,50 @@ function markConfigured() {
     fs.writeFileSync(strConfigPath, JSON.stringify({ configured: true, timestamp: Date.now() }));
 }
 
-// === EMBEDDED SERVER ===
-// Start Express server within Electron
+// Start Express server
 function startServer() {
-    // Import and start the server directly
-    const express = require('express');
-    const mongoose = require('mongoose');
-    const cors = require('cors');
-    const fs = require('fs');
+    console.log('Starting server...');
     
-    const objExpressApp = express();
-    const intPort = 8000;
+    // Check if port is available first
+    const net = require('net');
+    const server = net.createServer();
     
-    // Middleware
-    objExpressApp.use(cors());
-    objExpressApp.use(express.json({ limit: '10mb' }));
-    objExpressApp.use(express.urlencoded({ limit: '10mb', extended: true }));
-    
-    const strMongoURI = 'mongodb://127.0.0.1:27017/CollectorDream';
-    mongoose.connect(strMongoURI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
-    }).catch(err => console.log('MongoDB connection error:', err));
-    
-    // === DATABASE SCHEMA ===
-    const Schema = mongoose.Schema;
-    const dataSchema = new Schema({}, { strict: false });
-    const Data = mongoose.model('Data', dataSchema, 'collection');
-    
-    // === API ROUTES ===
-    // Individual record routes (MUST BE FIRST)
-    objExpressApp.get('/api/collection/:id', async (req, res) => {
-        try {
-            const strId = req.params.id;
-            const objDocument = await Data.findById(strId);
-            if (!objDocument) {
-                return res.status(404).json({ message: "Document not found" });
-            }
-            res.json(objDocument);
-        } catch (error) {
-            if (error.name === 'CastError') {
-                return res.status(400).json({ message: "Invalid ID format" });
-            }
-            res.status(500).json({ message: error.message });
+    server.listen(8000, (err) => {
+        if (err) {
+            console.log('Port 8000 is busy, trying 8001');
+            startServerOnPort(8001);
+        } else {
+            server.close();
+            startServerOnPort(8000);
         }
     });
     
-    objExpressApp.put('/api/collection/:id', async (req, res) => {
-        try {
-            const strId = req.params.id;
-            const objUpdatedData = await Data.findByIdAndUpdate(strId, req.body, { new: true });
-            if (!objUpdatedData) {
-                return res.status(404).json({ message: "Document not found" });
-            }
-            res.json(objUpdatedData);
-        } catch (error) {
-            if (error.name === 'CastError') {
-                return res.status(400).json({ message: "Invalid ID format" });
-            }
-            res.status(500).json({ message: error.message });
-        }
+    server.on('error', (err) => {
+        console.log('Port check failed:', err.message);
+        startServerOnPort(8001);
     });
-    
-    // General collection routes (AFTER individual routes)
-    objExpressApp.get('/api/collection', async (req, res) => {
-        try {
-            const arrAllData = await Data.find();
-            res.json(arrAllData);
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    objExpressApp.post('/api/collection', async (req, res) => {
-        try {
-            const objNewData = Data(req.body);
-            const objSavedData = await objNewData.save();
-            res.status(201).json(objSavedData);
-        } catch(err){
-            res.status(400).json({message: err.message});
-        }
-    });
-    
-    objExpressApp.delete('/api/collection/:id', async (req, res) => {
-        try {
-            const strId = req.params.id;
-            const objDocument = await Data.findById(strId);
-            if (!objDocument) {
-                return res.status(404).json({ message: "Document not found" });
-            }
-            const objDeletedData = await Data.findByIdAndDelete(strId);
-            res.json({ message: "Document deleted successfully", deletedData: objDeletedData });
-        } catch (error) {
-            if (error.name === 'CastError') {
-                return res.status(400).json({ message: "Invalid ID format" });
-            }
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    objExpressApp.get('/api/categories', (req, res) => {
-        try {
-            const strCategoriesPath = path.join(getUserDataDir(), 'categories.json');
-            let objCategories = {};
-            if (fs.existsSync(strCategoriesPath)) {
-                objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
-            }
-            res.json(objCategories);
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    objExpressApp.post('/api/categories', (req, res) => {
-        try {
-            const strCategoriesPath = path.join(getUserDataDir(), 'categories.json');
-            let objCategories = {};
-            if (fs.existsSync(strCategoriesPath)) {
-                objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
-            }
-            const { key: strKey, category: objCategory } = req.body;
-            objCategories[strKey] = objCategory;
-            fs.writeFileSync(strCategoriesPath, JSON.stringify(objCategories, null, 4));
-            res.json({ message: 'Category saved successfully' });
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    objExpressApp.delete('/api/categories/:key', (req, res) => {
-        try {
-            const strCategoriesPath = path.join(getUserDataDir(), 'categories.json');
-            let objCategories = {};
-            if (fs.existsSync(strCategoriesPath)) {
-                objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
-            }
-            const strKey = req.params.key;
-            if (!objCategories[strKey]) {
-                return res.status(404).json({ message: 'Category not found' });
-            }
-            delete objCategories[strKey];
-            fs.writeFileSync(strCategoriesPath, JSON.stringify(objCategories, null, 4));
-            res.json({ message: 'Category deleted successfully' });
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    // Settings routes
-    objExpressApp.get('/api/settings', (req, res) => {
-        try {
-            const strSettingsPath = path.join(getUserDataDir(), 'settings.json');
-            let objSettings = { darkMode: false };
-            if (fs.existsSync(strSettingsPath)) {
-                objSettings = JSON.parse(fs.readFileSync(strSettingsPath, 'utf8'));
-            }
-            res.json(objSettings);
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    objExpressApp.post('/api/settings', (req, res) => {
-        try {
-            const strSettingsPath = path.join(getUserDataDir(), 'settings.json');
-            const objSettings = req.body;
-            fs.writeFileSync(strSettingsPath, JSON.stringify(objSettings, null, 4));
-            res.json({ message: 'Settings saved successfully' });
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    });
-    
-    // Serve static files
-    objExpressApp.use(express.static(__dirname));
-    
-    objExpressApp.get('/', (req, res) => {
-        res.sendFile(path.join(__dirname, 'index.html'));
-    });
-    
-    objServer = objExpressApp.listen(intPort, () => {
-        console.log(`Server running on port ${intPort}`);
-    });
+}
+
+function startServerOnPort(port) {
+    try {
+        process.env.PORT = port;
+        require('./server.js');
+        console.log(`Server started on port ${port}`);
+        
+        // Update the URL to load
+        setTimeout(() => {
+            const url = `http://localhost:${port}`;
+            console.log('Loading URL:', url);
+            objMainWindow.loadURL(url).catch(err => {
+                console.error('Failed to load URL:', err);
+                objMainWindow.loadFile('index.html');
+            });
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Failed to start server:', error);
+        objMainWindow.loadFile('index.html');
+    }
 }
 
 // === IPC HANDLERS ===
@@ -324,20 +178,12 @@ app.whenReady().then(async () => {
         new AppUpdater();
     } catch (error) {
         console.error('Error during app startup:', error);
-        // Still try to create the main window as fallback
         createWindow();
     }
 });
 
 // Handle app quit when all windows closed
 app.on('window-all-closed', () => {
-    try {
-        if (objServer) {
-            objServer.close();
-        }
-    } catch (error) {
-        console.error('Error closing server:', error);
-    }
     if (process.platform !== 'darwin') {
         app.quit();
     }
@@ -346,12 +192,10 @@ app.on('window-all-closed', () => {
 // Handle uncaught exceptions to prevent app crashes
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
-    // Don't exit the process, just log the error
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Don't exit the process, just log the error
 });
 
 // Handle app activation (macOS)
