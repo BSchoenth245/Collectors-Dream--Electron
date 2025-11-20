@@ -1,32 +1,61 @@
 // === AUTO-UPDATER MODULE ===
 const { autoUpdater } = require('electron-updater');
-const { dialog } = require('electron');
+const { dialog, app } = require('electron');
 
 // Handle automatic app updates
 class AppUpdater {
     constructor() {
-        autoUpdater.checkForUpdatesAndNotify();
+        // Configure updater
+        autoUpdater.autoDownload = false;
+        autoUpdater.setFeedURL({
+            provider: 'github',
+            owner: 'BSchoenth245',
+            repo: 'Collectors-Dream'
+        });
+        
+        console.log('App version:', app.getVersion());
+        console.log('Checking for updates...');
+        
+        // Check for updates
+        setTimeout(() => {
+            autoUpdater.checkForUpdatesAndNotify();
+        }, 3000);
         
         // === UPDATE EVENT HANDLERS ===
-        // Handle update available notification
-        autoUpdater.on('update-available', () => {
+        autoUpdater.on('checking-for-update', () => {
+            console.log('Checking for update...');
+        });
+        
+        autoUpdater.on('update-available', (info) => {
+            console.log('Update available:', info.version);
             dialog.showMessageBox({
                 type: 'info',
-                title: 'Update available',
-                message: 'A new version is available. It will be downloaded in the background.',
-                buttons: ['OK']
+                title: 'Update Available',
+                message: `Version ${info.version} is available. Download now?`,
+                buttons: ['Download', 'Later']
+            }).then((result) => {
+                if (result.response === 0) {
+                    autoUpdater.downloadUpdate();
+                }
             });
         });
+        
+        autoUpdater.on('update-not-available', () => {
+            console.log('No updates available');
+        });
+        
+        autoUpdater.on('error', (err) => {
+            console.error('Updater error:', err);
+        });
 
-        // Handle update downloaded notification
-        autoUpdater.on('update-downloaded', () => {
+        autoUpdater.on('update-downloaded', (info) => {
             dialog.showMessageBox({
                 type: 'info',
-                title: 'Update ready',
-                message: 'Update downloaded. The application will restart to apply the update.',
+                title: 'Update Ready',
+                message: `Version ${info.version} downloaded. Restart to install?`,
                 buttons: ['Restart', 'Later']
-            }).then((objResult) => {
-                if (objResult.response === 0) {
+            }).then((result) => {
+                if (result.response === 0) {
                     autoUpdater.quitAndInstall();
                 }
             });
