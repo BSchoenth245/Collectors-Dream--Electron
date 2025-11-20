@@ -312,6 +312,36 @@ input[type="checkbox"], input[type="radio"] {
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
     border: 1px solid var(--border-light);
+    overflow-x: auto;
+}
+
+.datatable-container table {
+    min-width: 600px;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .datatable-container {
+        padding: 10px;
+        margin-left: -10px;
+        margin-right: -10px;
+        border-radius: 0;
+    }
+    
+    .datatable-container table {
+        font-size: 14px;
+    }
+    
+    .datatable-container th,
+    .datatable-container td {
+        padding: 8px 4px;
+        white-space: nowrap;
+    }
+    
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
 }
 
 /* Categories Page Styles */

@@ -1,1 +1,12 @@
-{}
+{
+    "graded_cards": {
+        "name": "Graded Cards",
+        "fields": [
+            {
+                "name": "grading_company",
+                "label": "Grading Company",
+                "type": "text"
+            }
+        ]
+    }
+}

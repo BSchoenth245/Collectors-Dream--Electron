@@ -118,8 +118,11 @@ app.post('/api/collection', async (req, res) => {
 // Category routes
 app.get('/api/categories', (req, res) => {
     try {
-        const strCategoriesPath = path.join(__dirname, 'categories.json');
-        const objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        let objCategories = {};
+        if (fs.existsSync(strCategoriesPath)) {
+            objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        }
         res.json(objCategories);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -128,8 +131,11 @@ app.get('/api/categories', (req, res) => {
 
 app.post('/api/categories', async (req, res) => {
     try {
-        const strCategoriesPath = path.join(__dirname, 'categories.json');
-        const objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        let objCategories = {};
+        if (fs.existsSync(strCategoriesPath)) {
+            objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        }
         const { key: strKey, category: objCategory, migrate = false } = req.body;
         
         const objOldCategory = objCategories[strKey];
@@ -177,8 +183,11 @@ async function migrateCategoryItems(strCategoryKey, objOldCategory, objNewCatego
 
 app.delete('/api/categories/:key', (req, res) => {
     try {
-        const strCategoriesPath = path.join(__dirname, 'categories.json');
-        const objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        let objCategories = {};
+        if (fs.existsSync(strCategoriesPath)) {
+            objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
+        }
         const strKey = req.params.key;
         if (!objCategories[strKey]) {
             return res.status(404).json({ message: 'Category not found' });
@@ -194,8 +203,8 @@ app.delete('/api/categories/:key', (req, res) => {
 // Settings routes
 app.get('/api/settings', (req, res) => {
     try {
-        const strSettingsPath = path.join(__dirname, 'settings.json');
-        let objSettings = { darkMode: false };
+        const strSettingsPath = path.join(getUserDataPath(), 'settings.json');
+        let objSettings = { darkMode: false, theme: 'default' };
         if (fs.existsSync(strSettingsPath)) {
             objSettings = JSON.parse(fs.readFileSync(strSettingsPath, 'utf8'));
         }
@@ -207,7 +216,7 @@ app.get('/api/settings', (req, res) => {
 
 app.post('/api/settings', (req, res) => {
     try {
-        const strSettingsPath = path.join(__dirname, 'settings.json');
+        const strSettingsPath = path.join(getUserDataPath(), 'settings.json');
         const objSettings = req.body;
         fs.writeFileSync(strSettingsPath, JSON.stringify(objSettings, null, 4));
         res.json({ message: 'Settings saved successfully' });
@@ -229,21 +238,72 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Catch-all route for debugging
-app.get('*', (req, res) => {
+// Handle 404s without catch-all route
+app.use((req, res) => {
     console.log('404 - Route not found:', req.url);
     res.status(404).send('Not Found: ' + req.url);
 });
 
+// Get user data directory for writable files
+function getUserDataPath() {
+    const os = require('os');
+    
+    if (process.platform === 'win32') {
+        return path.join(os.homedir(), 'AppData', 'Local', 'CollectorsDream');
+    } else if (process.platform === 'darwin') {
+        return path.join(os.homedir(), 'Library', 'Application Support', 'CollectorsDream');
+    } else {
+        return path.join(os.homedir(), '.config', 'collectors-dream');
+    }
+}
+
+// Ensure required files exist
+function ensureRequiredFiles() {
+    const userDataDir = getUserDataPath();
+    
+    // Create user data directory if it doesn't exist
+    if (!fs.existsSync(userDataDir)) {
+        fs.mkdirSync(userDataDir, { recursive: true });
+        console.log('Created user data directory:', userDataDir);
+    }
+    
+    const strCategoriesPath = path.join(userDataDir, 'categories.json');
+    if (!fs.existsSync(strCategoriesPath)) {
+        fs.writeFileSync(strCategoriesPath, '{}');
+        console.log('Created categories.json at:', strCategoriesPath);
+    }
+    
+    const strSettingsPath = path.join(userDataDir, 'settings.json');
+    if (!fs.existsSync(strSettingsPath)) {
+        const defaultSettings = { darkMode: false, theme: 'default' };
+        fs.writeFileSync(strSettingsPath, JSON.stringify(defaultSettings, null, 4));
+        console.log('Created settings.json at:', strSettingsPath);
+    }
+}
+
 // Start server
 if (!module.parent) {
+    ensureRequiredFiles();
     app.listen(intPort, () => {
         console.log(`Server running on port ${intPort}`);
+    }).on('error', (err) => {
+        console.error('Server failed to start:', err);
     });
 } else {
     // When required by Electron
-    const server = app.listen(intPort, () => {
-        console.log(`Server running on port ${intPort}`);
-    });
-    module.exports = server;
+    try {
+        ensureRequiredFiles();
+        const server = app.listen(intPort, () => {
+            console.log(`Server running on port ${intPort}`);
+        });
+        
+        server.on('error', (err) => {
+            console.error('Server error:', err);
+        });
+        
+        module.exports = server;
+    } catch (error) {
+        console.error('Failed to start server in Electron:', error);
+        throw error;
+    }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "collectors-dream",
-  "version": "1.1.7",
+  "version": "1.1.86",
   "description": "A database management system for collectors",
   "main": "main.js",
   "scripts": {
@@ -9,10 +9,10 @@
     "desktop": "electron .",
     "setup": "node setup.js",
     "clean": "node clean-for-release.js",
-    "build": "npm run clean && electron-builder --win --linux",
-    "build-win": "npm run clean && electron-builder --win",
-    "build-linux": "npm run clean && electron-builder --linux",
-    "release": "npm run clean && electron-builder --win --linux --publish=always"
+    "build": "electron-builder --win --linux --publish=never",
+    "build-win": "electron-builder --win --publish=never",
+    "build-linux": "electron-builder --linux --publish=never",
+    "release": "electron-builder --win --linux --publish=always"
   },
   "author": {
     "name": "Brock Schoenthlaer",
@@ -45,8 +45,6 @@
       "mongo-wizard.html",
       "app.js",
       "styles.css",
-      "categories.json",
-      "settings.json",
       "assets/colored-logo.png",
       "node_modules/**/*",
       "!node_modules/**/test/**/*",
@@ -54,6 +52,8 @@
       "!node_modules/**/*.md",
       "!node_modules/**/LICENSE*",
       "!node_modules/**/CHANGELOG*",
+      "!categories.json",
+      "!settings.json",
       "!data/**/*",
       "!dist/**/*"
     ],
@@ -80,7 +80,7 @@
       "artifactName": "${productName}-${version}.${ext}"
     },
 
-    "afterPack": "build/afterPack.js",
+
     "compression": "store",
     "nsis": {
       "oneClick": false,

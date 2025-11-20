@@ -103,7 +103,7 @@ function startServer() {
 function startServerOnPort(port) {
     try {
         process.env.PORT = port;
-        require('./server.js');
+        objServer = require('./server.js');
         console.log(`Server started on port ${port}`);
         
         // Update the URL to load
@@ -114,10 +114,11 @@ function startServerOnPort(port) {
                 console.error('Failed to load URL:', err);
                 objMainWindow.loadFile('index.html');
             });
-        }, 2000);
+        }, 3000);
         
     } catch (error) {
         console.error('Failed to start server:', error);
+        console.error('Error details:', error.stack);
         objMainWindow.loadFile('index.html');
     }
 }
