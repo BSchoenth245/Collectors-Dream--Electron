@@ -204,7 +204,7 @@ app.delete('/api/categories/:key', (req, res) => {
 app.get('/api/settings', (req, res) => {
     try {
         const strSettingsPath = path.join(getUserDataPath(), 'settings.json');
-        let objSettings = { darkMode: false, theme: 'default' };
+        let objSettings = { darkMode: false, theme: 'default', language: 'en' };
         if (fs.existsSync(strSettingsPath)) {
             objSettings = JSON.parse(fs.readFileSync(strSettingsPath, 'utf8'));
         }
@@ -222,6 +222,20 @@ app.post('/api/settings', (req, res) => {
         res.json({ message: 'Settings saved successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+});
+
+// Language files route
+app.get('/locales/:lang.json', (req, res) => {
+    try {
+        const langFile = path.join(__dirname, 'locales', `${req.params.lang}.json`);
+        if (fs.existsSync(langFile)) {
+            res.json(JSON.parse(fs.readFileSync(langFile, 'utf8')));
+        } else {
+            res.status(404).json({ error: 'Language file not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -275,7 +289,7 @@ function ensureRequiredFiles() {
     
     const strSettingsPath = path.join(userDataDir, 'settings.json');
     if (!fs.existsSync(strSettingsPath)) {
-        const defaultSettings = { darkMode: false, theme: 'default' };
+        const defaultSettings = { darkMode: false, theme: 'default', language: 'en' };
         fs.writeFileSync(strSettingsPath, JSON.stringify(defaultSettings, null, 4));
         console.log('Created settings.json at:', strSettingsPath);
     }

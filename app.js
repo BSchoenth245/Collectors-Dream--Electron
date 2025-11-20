@@ -107,11 +107,20 @@ function initializeDataTable(arrData) {
             columns: arrColumns,
             responsive: true,
             pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, t('all') || "All"]],
             order: [[0, 'asc']],
             language: {
-                emptyTable: "No data available",
-                zeroRecords: "No matching records found"
+                emptyTable: t('noData') || "No data available",
+                zeroRecords: t('noRecords') || "No matching records found",
+                search: t('search') || "Search:",
+                lengthMenu: t('show') + " _MENU_ " + t('entries') || "Show _MENU_ entries",
+                info: t('showing') + " _START_ " + t('to') + " _END_ " + t('of') + " _TOTAL_ " + t('entries') || "Showing _START_ to _END_ of _TOTAL_ entries",
+                paginate: {
+                    first: t('first') || "First",
+                    last: t('last') || "Last",
+                    next: t('next') || "Next",
+                    previous: t('previous') || "Previous"
+                }
             },
             destroy: true,
             autoWidth: false
@@ -186,7 +195,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // Show empty table with instruction message
 function showEmptyTable() {
     const elmTable = document.getElementById('dataTable');
-    elmTable.innerHTML = '<thead><tr><th>Select a Category</th></tr></thead><tbody><tr><td>Please select a category from the dropdown above to view records</td></tr></tbody>';
+    const headerText = t('selectCategory') || 'Select a Category';
+    const messageText = t('selectCategoryToView') || 'Please select a category from the dropdown above to view records';
+    elmTable.innerHTML = `<thead><tr><th>${headerText}</th></tr></thead><tbody><tr><td>${messageText}</td></tr></tbody>`;
 }
 
 // === TABLE MANAGEMENT ===
@@ -564,10 +575,11 @@ function populateCategoryDropdowns() {
     const elmDeleteSelect = document.getElementById('deleteCategorySelect');
     
     // Clear existing options except first
-    elmCategorySelect.innerHTML = '<option value="">Choose a category...</option>';
-    elmSearchSelect.innerHTML = '<option value="">Choose a category...</option>';
-    elmEditSelect.innerHTML = '<option value="">Choose a category...</option>';
-    elmDeleteSelect.innerHTML = '<option value="">Choose a category...</option>';
+    const chooseText = t('chooseCategory') || 'Choose a category...';
+    elmCategorySelect.innerHTML = `<option value="">${chooseText}</option>`;
+    elmSearchSelect.innerHTML = `<option value="">${chooseText}</option>`;
+    elmEditSelect.innerHTML = `<option value="">${chooseText}</option>`;
+    elmDeleteSelect.innerHTML = `<option value="">${chooseText}</option>`;
     
     // Add categories from JSON
     Object.keys(objCategories).forEach(strKey => {
@@ -1140,7 +1152,7 @@ function displayFilteredData(arrData) {
 }
 
 // === SETTINGS MANAGEMENT ===
-let objUserSettings = { darkMode: false, theme: 'default' };
+let objUserSettings = { darkMode: false, theme: 'default', language: 'en' };
 
 // Load settings from server
 function loadSettings() {
@@ -1165,6 +1177,7 @@ function loadSettings() {
 function applySettings() {
     const elmToggle = document.getElementById('darkModeToggle');
     const elmThemeRadios = document.querySelectorAll('input[name="theme"]');
+    const elmLanguageSelect = document.getElementById('languageSelect');
     
     // Apply theme
     document.body.className = '';
@@ -1182,6 +1195,11 @@ function applySettings() {
     } else {
         document.body.classList.remove('dark-mode');
         if (elmToggle) elmToggle.checked = false;
+    }
+    
+    // Set language selector
+    if (elmLanguageSelect && objUserSettings.language) {
+        elmLanguageSelect.value = objUserSettings.language;
     }
 }
 
@@ -1249,7 +1267,29 @@ function exportData() {
     });
 }
 
+// Change language function
+function changeLanguage() {
+    const elmLanguageSelect = document.getElementById('languageSelect');
+    const selectedLanguage = elmLanguageSelect.value;
+    
+    // Update settings
+    objUserSettings.language = selectedLanguage;
+    saveSettings();
+    
+    // Switch language
+    if (typeof switchLanguage === 'function') {
+        switchLanguage(selectedLanguage);
+    }
+}
+
 // Load settings when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
+    
+    // Initialize translations after settings are loaded
+    setTimeout(() => {
+        if (typeof initializeI18n === 'function') {
+            initializeI18n();
+        }
+    }, 100);
 });
