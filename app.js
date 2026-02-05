@@ -1176,17 +1176,20 @@ function loadSettings() {
 // Apply settings to UI
 function applySettings() {
     const elmToggle = document.getElementById('darkModeToggle');
-    const elmThemeRadios = document.querySelectorAll('input[name="theme"]');
+    const elmThemeSelect = document.getElementById('themeSelect');
     const elmLanguageSelect = document.getElementById('languageSelect');
     
-    // Apply theme
-    document.body.className = '';
-    document.body.classList.add(`theme-${objUserSettings.theme}`);
+    // Apply theme - ensure valid theme value
+    const arrValidThemes = ['default', 'teal-gold', 'rose-navy', 'forest-amber', 'ocean-blue', 'sunset-orange', 'midnight-silver'];
+    const strTheme = arrValidThemes.includes(objUserSettings.theme) ? objUserSettings.theme : 'default';
     
-    // Set correct radio button
-    elmThemeRadios.forEach(radio => {
-        radio.checked = radio.value === objUserSettings.theme;
-    });
+    document.body.className = '';
+    document.body.classList.add(`theme-${strTheme}`);
+    
+    // Set theme dropdown
+    if (elmThemeSelect) {
+        elmThemeSelect.value = strTheme;
+    }
     
     // Apply dark mode
     if (objUserSettings.darkMode) {
@@ -1221,9 +1224,9 @@ function saveSettings() {
 
 // Change theme
 function changeTheme() {
-    const elmSelectedRadio = document.querySelector('input[name="theme"]:checked');
-    if (elmSelectedRadio) {
-        objUserSettings.theme = elmSelectedRadio.value;
+    const elmThemeSelect = document.getElementById('themeSelect');
+    if (elmThemeSelect) {
+        objUserSettings.theme = elmThemeSelect.value;
         applySettings();
         saveSettings();
     }

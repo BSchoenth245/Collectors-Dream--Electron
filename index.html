@@ -93,7 +93,7 @@
                 <!-- Categories Grid -->
                 <div id="categoriesGrid" class="categories-grid"></div>
 
-                <div id="addCategoryForm" style="display: none;" class="mb-3 p-3 border rounded">
+                <div id="addCategoryForm" style="display: none; border-radius: 12px;" class="mb-3 p-3 border">
                     <h5 data-i18n="createNewCategory">Create New Category</h5>
                     <div class="mb-2">
                         <input type="text" id="newCategoryName" class="form-control" data-i18n="categoryName" placeholder="Category Name">
@@ -104,7 +104,7 @@
                     <button class="btn btn-sm btn-danger" onclick="cancelAddCategory()" data-i18n="cancel">Cancel</button>
                 </div>
 
-                <div id="editCategoryForm" style="display: none;" class="mb-3 p-3 border rounded">
+                <div id="editCategoryForm" style="display: none; border-radius: 12px;" class="mt-3 mb-3 p-3 border">
                     <h5>Edit Category</h5>
                     <div class="mb-2">
                         <label for="editCategorySelect" class="form-label">Select Category to Edit:</label>
@@ -123,7 +123,7 @@
                     </div>
                 </div>
 
-                <div id="deleteCategoryForm" style="display: none;" class="mb-3 p-3 border rounded">
+                <div id="deleteCategoryForm" style="display: none; border-radius: 12px;" class="mb-3 p-3 border">
                     <h5>Delete Category</h5>
                     <div class="mb-2">
                         <label for="deleteCategorySelect" class="form-label">Select Category to Delete:</label>
@@ -142,19 +142,19 @@
                 
                 <div class="settings-section">
                     <h5 data-i18n="themes">Themes</h5>
-                    <div class="theme-options">
-                        <label class="theme-option">
-                            <input type="radio" name="theme" value="default" onchange="changeTheme()" checked>
-                            <span class="theme-name" data-i18n="defaultTheme">Default (Deep Purple)</span>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span class="setting-text" data-i18n="selectTheme">Select Theme</span>
                         </label>
-                        <label class="theme-option">
-                            <input type="radio" name="theme" value="teal-gold" onchange="changeTheme()">
-                            <span class="theme-name" data-i18n="tealGoldTheme">Teal & Gold</span>
-                        </label>
-                        <label class="theme-option">
-                            <input type="radio" name="theme" value="rose-navy" onchange="changeTheme()">
-                            <span class="theme-name" data-i18n="roseNavyTheme">Rose & Navy</span>
-                        </label>
+                        <select id="themeSelect" class="form-select" onchange="changeTheme()" style="width: 250px;">
+                            <option value="default" data-i18n="defaultTheme">Default (Deep Purple)</option>
+                            <option value="teal-gold" data-i18n="tealGoldTheme">Teal & Gold</option>
+                            <option value="rose-navy" data-i18n="roseNavyTheme">Rose & Navy</option>
+                            <option value="forest-amber" data-i18n="forestAmberTheme">Forest & Amber</option>
+                            <option value="ocean-blue" data-i18n="oceanBlueTheme">Ocean Blue</option>
+                            <option value="sunset-orange" data-i18n="sunsetOrangeTheme">Sunset Orange</option>
+                            <option value="midnight-silver" data-i18n="midnightSilverTheme">Midnight Silver</option>
+                        </select>
                     </div>
                     <div class="setting-item">
                         <label class="setting-label">
