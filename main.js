@@ -31,7 +31,7 @@ function createWizard() {
     });
 }
 
-// Create main application window
+// In main.js, when creating the window, inject the server URL
 function createWindow() {
     objMainWindow = new BrowserWindow({
         width: 1200,
@@ -39,18 +39,17 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false,
-            cache: false
+            webSecurity: false
         },
         icon: path.join(__dirname, 'assets', 'colored-logo.png')
     });
 
-    // Start the Express server (it will handle loading the URL)
-    startServer();
-
-    objMainWindow.on('closed', () => {
-        objMainWindow = null;
-    });
+    // Option 1: Point to cloud server in production
+    const SERVER_URL = 'http://136.111.201.17:8000';  // Change this to your GCP IP
+    objMainWindow.loadURL(`${SERVER_URL}/index.html`);
+    
+    // OR Option 2: Keep local for development
+    // objMainWindow.loadFile('index.html');
 }
 
 // Get user data directory

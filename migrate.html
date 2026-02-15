@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Migration - Collector's Dream</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .migration-container {
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 40px;
+            background: var(--card-gradient);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(124, 58, 237, 0.15);
+        }
+        .migration-status {
+            margin: 30px 0;
+            padding: 20px;
+            background: var(--background-light);
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+        }
+        .progress-container {
+            margin: 20px 0;
+        }
+        .migration-info {
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container migration-container">
+        <h2>Migrate Your Local Data to Cloud</h2>
+        <p class="text-muted">Transfer your existing collection to your new cloud account</p>
+
+        <div class="migration-info">
+            <h6><strong>What will be migrated:</strong></h6>
+            <ul class="mb-0">
+                <li>All collection items from your local database</li>
+                <li>Your categories and their configurations</li>
+                <li>Your application settings and preferences</li>
+            </ul>
+        </div>
+
+        <div class="migration-status" id="migrationStatus">
+            <h5>Migration Status</h5>
+            <p id="statusMessage">Ready to begin migration</p>
+            <div class="progress-container" style="display: none;">
+                <div class="progress" style="height: 30px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         id="progressBar" 
+                         role="progressbar" 
+                         style="width: 0%">
+                        <span id="progressText">0%</span>
+                    </div>
+                </div>
+            </div>
+            <div id="migrationDetails" class="mt-3" style="display: none;">
+                <small class="text-muted">
+                    <div>Items migrated: <span id="itemCount">0</span></div>
+                    <div>Categories migrated: <span id="categoryCount">0</span></div>
+                </small>
+            </div>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button class="btn btn-primary btn-lg" id="startMigration">
+                <i class="fas fa-cloud-upload-alt"></i> Start Migration
+            </button>
+            <button class="btn btn-secondary" id="skipMigration">
+                Skip - I'll set up my collection manually
+            </button>
+        </div>
+
+        <div class="mt-4">
+            <small class="text-muted">
+                <strong>Note:</strong> This process may take a few minutes depending on the size of your collection. 
+                Please don't close this window until migration is complete.
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+    <script src="config.js"></script>
+    <script src="migrate.js"></script>
+</body>
+</html>

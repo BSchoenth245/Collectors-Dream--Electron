@@ -1,9 +1,15 @@
 // === DEPENDENCIES & SETUP ===
+require('dotenv').config(); // Load environment variables
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+
+// Import models and middleware
+const User = require('./models/User');
+const { authenticateToken } = require('./middleware/auth');
 
 const app = express();
 const intPort = process.env.PORT || 8000;
@@ -22,33 +28,209 @@ app.use('/api', (req, res, next) => {
 });
 
 // === DATABASE CONNECTION ===
-const strMongoURI = 'mongodb://127.0.0.1:27017/CollectorDream';
+const strMongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/CollectorDream';
 mongoose.connect(strMongoURI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-.then(() => console.log('MongoDB connected successfully'))
+.then(() => console.log('MongoDB connected successfully to:', strMongoURI.includes('mongodb.net') ? 'MongoDB Atlas' : 'Local MongoDB'))
 .catch(err => console.log('MongoDB connection error:', err));
 
 // === DATABASE SCHEMA ===
 const Schema = mongoose.Schema;
-const dataSchema = new Schema({}, { strict: false });
+
+// Update data schema to include userId
+const dataSchema = new Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true  // Index for faster queries
+    },
+    category: {
+        type: String,
+        required: true,
+        index: true  // Index for faster category filtering
+    }
+    // All other fields are dynamic (strict: false)
+}, { strict: false, timestamps: true });
+
 const Data = mongoose.model('Data', dataSchema, 'collection');
 
-// === API ROUTES (MUST BE BEFORE STATIC FILES) ===
+// === AUTHENTICATION ROUTES (MUST BE BEFORE STATIC FILES) ===
 
-// Version check endpoint
-app.get('/api/version', (req, res) => {
-    res.json({ version: '1.1.2', timestamp: Date.now() });
+// Register new user
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        // Validate input
+        if (!username || !email || !password) {
+            return res.status(400).json({ message: 'All fields are required' });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        if (existingUser) {
+            return res.status(400).json({ 
+                message: existingUser.email === email 
+                    ? 'Email already registered' 
+                    : 'Username already taken' 
+            });
+        }
+
+        // Create new user
+        const user = new User({ username, email, password });
+        await user.save();
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { userId: user._id, username: user.username },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' } // Token expires in 7 days
+        );
+
+        res.status(201).json({
+            message: 'User registered successfully',
+            token,
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ message: 'Error registering user' });
+    }
 });
 
-// Individual collection record routes (MUST BE FIRST)
-app.get('/api/collection/:id', async (req, res) => {
+// Login user
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password, rememberMe } = req.body;
+
+        // Validate input
+        if (!username || !password) {
+            return res.status(400).json({ message: 'Username and password are required' });
+        }
+
+        // Find user (allow login with username OR email)
+        const user = await User.findOne({ 
+            $or: [{ username }, { email: username }] 
+        });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Check password
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Update last login
+        user.lastLogin = new Date();
+        await user.save();
+
+        // Generate JWT token with different expiry based on rememberMe
+        const expiresIn = rememberMe ? '30d' : '7d';
+        const token = jwt.sign(
+            { userId: user._id, username: user.username },
+            process.env.JWT_SECRET,
+            { expiresIn }
+        );
+
+        res.json({
+            message: 'Login successful',
+            token,
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Error logging in' });
+    }
+});
+
+// Verify token (check if user is still authenticated)
+app.get('/api/auth/verify', authenticateToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.userId).select('-password');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({
+            valid: true,
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error verifying token' });
+    }
+});
+
+// Logout (client-side will delete token, but this endpoint can be used for logging)
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+    // In a more complex setup, you might invalidate the token in a blacklist
+    res.json({ message: 'Logout successful' });
+});
+
+// === VERSION CHECK ENDPOINT ===
+app.get('/api/version', (req, res) => {
+    res.json({ version: '1.2.0', timestamp: Date.now() });
+});
+
+// === COLLECTION ROUTES (PROTECTED) ===
+
+// GET all collection items (filtered by user)
+app.get('/api/collection', authenticateToken, async (req, res) => {
+    console.log('GET /api/collection - Loading records for user:', req.user.userId);
+    try {
+        const arrAllData = await Data.find({ userId: req.user.userId });
+        console.log('Found', arrAllData.length, 'records');
+        res.json(arrAllData);
+    } catch (error) {
+        console.log('Error loading collection:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// POST new collection item (with userId)
+app.post('/api/collection', authenticateToken, async (req, res) => {
+    try {
+        const objNewData = new Data({
+            ...req.body,
+            userId: req.user.userId  // Automatically add user ID
+        });
+        const objSavedData = await objNewData.save();
+        res.status(201).json(objSavedData);
+    } catch(err){
+        res.status(400).json({message: err.message});
+    }
+});
+
+// GET single item (verify ownership)
+app.get('/api/collection/:id', authenticateToken, async (req, res) => {
     try {
         const strId = req.params.id;
-        const objDocument = await Data.findById(strId);
+        const objDocument = await Data.findOne({ 
+            _id: strId, 
+            userId: req.user.userId  // Verify user owns this item
+        });
         if (!objDocument) {
-            return res.status(404).json({ message: "Document not found" });
+            return res.status(404).json({ message: "Document not found or access denied" });
         }
         res.json(objDocument);
     } catch (error) {
@@ -59,12 +241,20 @@ app.get('/api/collection/:id', async (req, res) => {
     }
 });
 
-app.put('/api/collection/:id', async (req, res) => {
+// PUT update item (verify ownership)
+app.put('/api/collection/:id', authenticateToken, async (req, res) => {
     try {
         const strId = req.params.id;
-        const objUpdatedData = await Data.findByIdAndUpdate(strId, req.body, { new: true });
+        // Don't allow userId to be changed
+        const { userId, ...updateData } = req.body;
+        
+        const objUpdatedData = await Data.findOneAndUpdate(
+            { _id: strId, userId: req.user.userId },
+            updateData,
+            { new: true }
+        );
         if (!objUpdatedData) {
-            return res.status(404).json({ message: "Document not found" });
+            return res.status(404).json({ message: "Document not found or access denied" });
         }
         res.json(objUpdatedData);
     } catch (error) {
@@ -75,15 +265,18 @@ app.put('/api/collection/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/collection/:id', async (req, res) => {
+// DELETE item (verify ownership)
+app.delete('/api/collection/:id', authenticateToken, async (req, res) => {
     try {
         const strId = req.params.id;
-        const objDocument = await Data.findById(strId);
+        const objDocument = await Data.findOneAndDelete({ 
+            _id: strId, 
+            userId: req.user.userId 
+        });
         if (!objDocument) {
-            return res.status(404).json({ message: "Document not found" });
+            return res.status(404).json({ message: "Document not found or access denied" });
         }
-        const objDeletedData = await Data.findByIdAndDelete(strId);
-        res.json({ message: "Document deleted successfully", deletedData: objDeletedData });
+        res.json({ message: "Document deleted successfully", deletedData: objDocument });
     } catch (error) {
         if (error.name === 'CastError') {
             return res.status(400).json({ message: "Invalid ID format" });
@@ -92,33 +285,12 @@ app.delete('/api/collection/:id', async (req, res) => {
     }
 });
 
-// General collection routes (AFTER specific ID routes)
-app.get('/api/collection', async (req, res) => {
-    console.log('GET /api/collection - Loading all records');
-    try {
-        const arrAllData = await Data.find();
-        console.log('Found', arrAllData.length, 'records');
-        res.json(arrAllData);
-    } catch (error) {
-        console.log('Error loading collection:', error);
-        res.status(500).json({ message: error.message });
-    }
-});
+// === CATEGORY ROUTES (USER-SPECIFIC) ===
 
-app.post('/api/collection', async (req, res) => {
+// GET categories (user-specific)
+app.get('/api/categories', authenticateToken, (req, res) => {
     try {
-        const objNewData = Data(req.body);
-        const objSavedData = await objNewData.save();
-        res.status(201).json(objSavedData);
-    } catch(err){
-        res.status(400).json({message: err.message});
-    }
-});
-
-// Category routes
-app.get('/api/categories', (req, res) => {
-    try {
-        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        const strCategoriesPath = path.join(getUserDataPath(), `categories_${req.user.userId}.json`);
         let objCategories = {};
         if (fs.existsSync(strCategoriesPath)) {
             objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
@@ -129,9 +301,10 @@ app.get('/api/categories', (req, res) => {
     }
 });
 
-app.post('/api/categories', async (req, res) => {
+// POST categories (user-specific)
+app.post('/api/categories', authenticateToken, async (req, res) => {
     try {
-        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        const strCategoriesPath = path.join(getUserDataPath(), `categories_${req.user.userId}.json`);
         let objCategories = {};
         if (fs.existsSync(strCategoriesPath)) {
             objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
@@ -143,7 +316,7 @@ app.post('/api/categories', async (req, res) => {
         fs.writeFileSync(strCategoriesPath, JSON.stringify(objCategories, null, 4));
         
         if (migrate && objOldCategory) {
-            await migrateCategoryItems(strKey, objOldCategory, objCategory);
+            await migrateCategoryItems(strKey, objOldCategory, objCategory, req.user.userId);
         }
         
         res.json({ message: 'Category saved successfully' });
@@ -152,38 +325,10 @@ app.post('/api/categories', async (req, res) => {
     }
 });
 
-async function migrateCategoryItems(strCategoryKey, objOldCategory, objNewCategory) {
-    const arrItems = await Data.find({ category: strCategoryKey });
-    
-    for (const objItem of arrItems) {
-        const objUpdates = {};
-        
-        // Add new fields with default values
-        objNewCategory.fields.forEach(objNewField => {
-            if (!objItem.hasOwnProperty(objNewField.name)) {
-                objUpdates[objNewField.name] = objNewField.type === 'boolean' ? false : 
-                                              objNewField.type === 'number' ? 0 : '';
-            }
-        });
-        
-        // Remove fields no longer in category
-        const arrNewFieldNames = objNewCategory.fields.map(f => f.name);
-        Object.keys(objItem.toObject()).forEach(strFieldName => {
-            if (strFieldName !== '_id' && strFieldName !== '__v' && strFieldName !== 'category' && 
-                !arrNewFieldNames.includes(strFieldName)) {
-                objUpdates[strFieldName] = undefined;
-            }
-        });
-        
-        if (Object.keys(objUpdates).length > 0) {
-            await Data.findByIdAndUpdate(objItem._id, { $unset: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v === undefined)), $set: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v !== undefined)) });
-        }
-    }
-}
-
-app.delete('/api/categories/:key', (req, res) => {
+// DELETE category (user-specific)
+app.delete('/api/categories/:key', authenticateToken, (req, res) => {
     try {
-        const strCategoriesPath = path.join(getUserDataPath(), 'categories.json');
+        const strCategoriesPath = path.join(getUserDataPath(), `categories_${req.user.userId}.json`);
         let objCategories = {};
         if (fs.existsSync(strCategoriesPath)) {
             objCategories = JSON.parse(fs.readFileSync(strCategoriesPath, 'utf8'));
@@ -200,10 +345,49 @@ app.delete('/api/categories/:key', (req, res) => {
     }
 });
 
-// Settings routes
-app.get('/api/settings', (req, res) => {
+// Helper function to migrate category items
+async function migrateCategoryItems(strCategoryKey, objOldCategory, objNewCategory, userId) {
+    const arrItems = await Data.find({ category: strCategoryKey, userId: userId });
+    
+    for (const objItem of arrItems) {
+        const objUpdates = {};
+        
+        // Add new fields with default values
+        objNewCategory.fields.forEach(objNewField => {
+            if (!objItem.hasOwnProperty(objNewField.name)) {
+                objUpdates[objNewField.name] = objNewField.type === 'boolean' ? false : 
+                                              objNewField.type === 'number' ? 0 : '';
+            }
+        });
+        
+        // Remove fields no longer in category
+        const arrNewFieldNames = objNewCategory.fields.map(f => f.name);
+        Object.keys(objItem.toObject()).forEach(strFieldName => {
+            if (strFieldName !== '_id' && strFieldName !== '__v' && 
+                strFieldName !== 'category' && strFieldName !== 'userId' &&
+                !arrNewFieldNames.includes(strFieldName)) {
+                objUpdates[strFieldName] = undefined;
+            }
+        });
+        
+        if (Object.keys(objUpdates).length > 0) {
+            await Data.findByIdAndUpdate(
+                objItem._id, 
+                { 
+                    $unset: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v === undefined)), 
+                    $set: Object.fromEntries(Object.entries(objUpdates).filter(([k,v]) => v !== undefined)) 
+                }
+            );
+        }
+    }
+}
+
+// === SETTINGS ROUTES (USER-SPECIFIC) ===
+
+// GET settings (user-specific)
+app.get('/api/settings', authenticateToken, (req, res) => {
     try {
-        const strSettingsPath = path.join(getUserDataPath(), 'settings.json');
+        const strSettingsPath = path.join(getUserDataPath(), `settings_${req.user.userId}.json`);
         let objSettings = { darkMode: false, theme: 'default', language: 'en' };
         if (fs.existsSync(strSettingsPath)) {
             objSettings = JSON.parse(fs.readFileSync(strSettingsPath, 'utf8'));
@@ -214,9 +398,10 @@ app.get('/api/settings', (req, res) => {
     }
 });
 
-app.post('/api/settings', (req, res) => {
+// POST settings (user-specific)
+app.post('/api/settings', authenticateToken, (req, res) => {
     try {
-        const strSettingsPath = path.join(getUserDataPath(), 'settings.json');
+        const strSettingsPath = path.join(getUserDataPath(), `settings_${req.user.userId}.json`);
         const objSettings = req.body;
         fs.writeFileSync(strSettingsPath, JSON.stringify(objSettings, null, 4));
         res.json({ message: 'Settings saved successfully' });
@@ -225,7 +410,7 @@ app.post('/api/settings', (req, res) => {
     }
 });
 
-// Language files route
+// === LANGUAGE FILES ROUTE ===
 app.get('/locales/:lang.json', (req, res) => {
     try {
         const langFile = path.join(__dirname, 'locales', `${req.params.lang}.json`);
@@ -248,15 +433,17 @@ app.use(express.static(__dirname, {
 
 // === ROOT ROUTE (LAST) ===
 app.get('/', (req, res) => {
-    console.log('Serving index.html');
-    res.sendFile(path.join(__dirname, 'index.html'));
+    console.log('Serving auth.html (login page)');
+    res.sendFile(path.join(__dirname, 'auth.html'));
 });
 
-// Handle 404s without catch-all route
+// Handle 404s
 app.use((req, res) => {
     console.log('404 - Route not found:', req.url);
     res.status(404).send('Not Found: ' + req.url);
 });
+
+// === HELPER FUNCTIONS ===
 
 // Get user data directory for writable files
 function getUserDataPath() {
@@ -271,7 +458,7 @@ function getUserDataPath() {
     }
 }
 
-// Ensure required files exist
+// Ensure required directories exist
 function ensureRequiredFiles() {
     const userDataDir = getUserDataPath();
     
@@ -281,25 +468,16 @@ function ensureRequiredFiles() {
         console.log('Created user data directory:', userDataDir);
     }
     
-    const strCategoriesPath = path.join(userDataDir, 'categories.json');
-    if (!fs.existsSync(strCategoriesPath)) {
-        fs.writeFileSync(strCategoriesPath, '{}');
-        console.log('Created categories.json at:', strCategoriesPath);
-    }
-    
-    const strSettingsPath = path.join(userDataDir, 'settings.json');
-    if (!fs.existsSync(strSettingsPath)) {
-        const defaultSettings = { darkMode: false, theme: 'default', language: 'en' };
-        fs.writeFileSync(strSettingsPath, JSON.stringify(defaultSettings, null, 4));
-        console.log('Created settings.json at:', strSettingsPath);
-    }
+    // Note: Individual user files will be created as needed
+    console.log('User data directory:', userDataDir);
 }
 
-// Start server
+// === START SERVER ===
 if (!module.parent) {
     ensureRequiredFiles();
     app.listen(intPort, () => {
         console.log(`Server running on port ${intPort}`);
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     }).on('error', (err) => {
         console.error('Server failed to start:', err);
     });
