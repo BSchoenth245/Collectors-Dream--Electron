@@ -65,3 +65,10 @@ app/dist/
 build-dir/
 repo/
 *.flatpak
+
+#.env files
+.env
+.env.local
+.env.*.local
+
+*.log
