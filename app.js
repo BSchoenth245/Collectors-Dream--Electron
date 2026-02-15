@@ -1,26 +1,51 @@
 // === DATA DISPLAY FUNCTIONS ===
 let objDataTable = null;
 
+// Helper function to get auth headers
+function getAuthHeaders() {
+    const token = localStorage.getItem('authToken');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
+
+// Check auth on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        window.location.href = 'auth.html';
+        return;
+    }
+});
+
 // Fetch and display all collection data in DataTable
 function fetchAndDisplayData() {
     console.log('Fetching data from API...');
-    fetch('http://127.0.0.1:8000/api/collection', {
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(API_URL + '/api/collection', {
         method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        }
+        headers: getAuthHeaders()  // Add this
     })
     .then(response => {
-        console.log('API Response status:', response.status);
+        if (response.status === 401 || response.status === 403) {
+            // Token invalid, redirect to login
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            window.location.href = 'auth.html';
+            return;
+        }
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(arrData => {
-        console.log('Received data:', arrData);
-        console.log('Data length:', arrData.length);
-        initializeDataTable(arrData);
+        if (arrData) {
+            console.log('Received data:', arrData);
+            initializeDataTable(arrData);
+        }
     })
     .catch(error => {
         console.error('Error fetching data:', error);
@@ -52,20 +77,23 @@ function initializeDataTable(arrData) {
     }
     console.log('Processing', arrData.length, 'records for table');
     
-    // Get all unique keys from data
+    // Fields to exclude from table display
+    const excludedFields = ['_id', '__v', 'userId', 'category', 'createdAt', 'updatedAt'];
+    
+    // Get all unique keys from data, excluding system fields
     const setAllKeys = new Set();
     arrData.forEach(objItem => {
         Object.keys(objItem).forEach(strKey => {
-            if (strKey !== '_id' && strKey !== '__v') {
+            if (!excludedFields.includes(strKey)) {
                 setAllKeys.add(strKey);
             }
         });
     });
     const arrHeaders = [...setAllKeys];
     
-    // Prepare columns configuration
+    // Prepare columns configuration with better formatting
     const arrColumns = arrHeaders.map(strHeader => ({
-        title: strHeader.charAt(0).toUpperCase() + strHeader.slice(1),
+        title: formatColumnName(strHeader), // Use formatting function
         data: strHeader,
         defaultContent: 'N/A',
         render: function(data, type, row) {
@@ -82,10 +110,9 @@ function initializeDataTable(arrData) {
         title: 'Actions',
         data: null,
         orderable: false,
-        width: '140px',
+        width: '100px',
         className: 'text-nowrap',
         render: function(data, type, row) {
-            console.log('Rendering actions for row:', row._id);
             return `
                 <button class="btn btn-sm btn-primary" onclick="viewRecord('${row._id}')">View</button>
             `;
@@ -123,7 +150,8 @@ function initializeDataTable(arrData) {
                 }
             },
             destroy: true,
-            autoWidth: false
+            autoWidth: false,
+            scrollX: true  // Enable horizontal scrolling for long tables
         });
         console.log('DataTable initialized successfully');
     } catch (error) {
@@ -134,17 +162,35 @@ function initializeDataTable(arrData) {
     }
 }
 
+// Helper function to format column names properly
+function formatColumnName(strFieldName) {
+    // Convert snake_case or camelCase to Title Case
+    return strFieldName
+        .replace(/_/g, ' ')  // Replace underscores with spaces
+        .replace(/([A-Z])/g, ' $1')  // Add space before capital letters
+        .split(' ')  // Split into words
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())  // Capitalize each word
+        .join(' ')  // Join back together
+        .trim();  // Remove extra spaces
+}
+
 // Fallback function to create basic table if DataTables fails
 function createBasicTable(arrData, arrHeaders) {
     const elmTable = document.getElementById('dataTable');
     elmTable.innerHTML = '';
     
+    // Fields to exclude
+    const excludedFields = ['_id', '__v', 'userId', 'category', 'createdAt', 'updatedAt'];
+    
+    // Filter headers to exclude system fields
+    const arrDisplayHeaders = arrHeaders.filter(h => !excludedFields.includes(h));
+    
     // Create header
     const elmThead = document.createElement('thead');
     const elmHeaderRow = document.createElement('tr');
-    [...arrHeaders, 'Actions'].forEach(strHeader => {
+    [...arrDisplayHeaders, 'Actions'].forEach(strHeader => {
         const elmTh = document.createElement('th');
-        elmTh.textContent = strHeader.charAt(0).toUpperCase() + strHeader.slice(1);
+        elmTh.textContent = formatColumnName(strHeader);
         elmHeaderRow.appendChild(elmTh);
     });
     elmThead.appendChild(elmHeaderRow);
@@ -154,7 +200,7 @@ function createBasicTable(arrData, arrHeaders) {
     const elmTbody = document.createElement('tbody');
     arrData.forEach(objItem => {
         const elmRow = document.createElement('tr');
-        arrHeaders.forEach(strHeader => {
+        arrDisplayHeaders.forEach(strHeader => {
             const elmCell = document.createElement('td');
             const value = objItem[strHeader];
             if (typeof value === 'boolean') {
@@ -223,15 +269,25 @@ function refreshTable() {
 // View specific record by ID
 function viewRecord(strId) {
     console.log('Fetching record with ID:', strId);
-    fetch(`http://127.0.0.1:8000/api/collection/${strId}`)
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/collection/${strId}`, {
+        headers: getAuthHeaders()  // ADD AUTH
+    })
     .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = 'auth.html';
+            return;
+        }
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         return response.json();
     })
     .then(objRecord => {
-        showViewPanel(objRecord);
+        if (objRecord) {
+            showViewPanel(objRecord);
+        }
     })
     .catch(error => {
         console.error('Error fetching record:', error);
@@ -261,8 +317,18 @@ function showViewPanel(objRecord) {
     // Show view mode buttons
     showViewModeButtons();
     
-    // Open panel
+    // Create overlay if it doesn't exist
+    let overlay = document.querySelector('.panel-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'panel-overlay';
+        overlay.onclick = closeSlidePanel;
+        document.body.appendChild(overlay);
+    }
+    
+    // Open panel and show overlay
     document.getElementById('slidePanel').classList.add('open');
+    overlay.classList.add('active');
     document.body.classList.add('panel-open');
     
     // Add click outside handler
@@ -282,8 +348,10 @@ function populatePanelContent(objRecord, boolEditMode) {
     
     // Create fields
     Object.keys(objRecord).forEach(strFieldName => {
-        if (strFieldName === '_id' || strFieldName === '__v' || strFieldName === 'category') {
-            return; // Skip internal fields
+        // Skip internal/system fields
+        const excludedFields = ['_id', '__v', 'userId', 'category', 'createdAt', 'updatedAt'];
+        if (excludedFields.includes(strFieldName)) {
+            return; // Skip these fields
         }
         
         const currentValue = objRecord[strFieldName];
@@ -429,31 +497,37 @@ function saveCurrentRecord(event) {
         objData[elmInput.name] = value;
     });
     
-    // Send update request
-    fetch(`http://127.0.0.1:8000/api/collection/${currentRecord._id}`, {
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    // Send update request WITH AUTH
+    fetch(`${API_URL}/api/collection/${currentRecord._id}`, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),  // ADD AUTH
         body: JSON.stringify(objData)
     })
     .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = 'auth.html';
+            return;
+        }
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(objUpdatedRecord => {
-        // Update current record
-        currentRecord = { ...currentRecord, ...objData };
-        
-        // Switch back to view mode
-        cancelEdit();
-        
-        // Refresh table
-        filterByCategory();
-        
-        Swal.fire('Success!', 'Record updated successfully', 'success');
+        if (objUpdatedRecord) {
+            // Update current record
+            currentRecord = { ...currentRecord, ...objData };
+            
+            // Switch back to view mode
+            cancelEdit();
+            
+            // Refresh table
+            filterByCategory();
+            
+            Swal.fire('Success!', 'Record updated successfully', 'success');
+        }
     })
     .catch(error => {
         console.error('Error updating record:', error);
@@ -487,30 +561,36 @@ function deleteCurrentRecord(event) {
             const recordId = currentRecord._id;
             console.log('Confirmed deletion of record:', recordId);
             
-            fetch(`http://127.0.0.1:8000/api/collection/${recordId}`, {
+            const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+            
+            fetch(`${API_URL}/api/collection/${recordId}`, {
                 method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+                headers: getAuthHeaders()  // ADD AUTH
             })
             .then(response => {
                 console.log('Delete response status:', response.status);
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = 'auth.html';
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 return response.json();
             })
             .then((result) => {
-                console.log('Delete successful:', result);
-                closeSlidePanel();
-                // Refresh the current filtered view
-                const elmCategorySelect = document.getElementById('searchCategorySelect');
-                if (elmCategorySelect && elmCategorySelect.value) {
-                    filterByCategory();
-                } else {
-                    showEmptyTable();
+                if (result) {
+                    console.log('Delete successful:', result);
+                    closeSlidePanel();
+                    // Refresh the current filtered view
+                    const elmCategorySelect = document.getElementById('searchCategorySelect');
+                    if (elmCategorySelect && elmCategorySelect.value) {
+                        filterByCategory();
+                    } else {
+                        showEmptyTable();
+                    }
+                    Swal.fire('Deleted!', 'Record has been deleted.', 'success');
                 }
-                Swal.fire('Deleted!', 'Record has been deleted.', 'success');
             })
             .catch(error => {
                 console.error('Error deleting record:', error);
@@ -532,6 +612,12 @@ function handleClickOutside(event) {
 // Close slide panel
 function closeSlidePanel() {
     document.getElementById('slidePanel').classList.remove('open');
+    
+    const overlay = document.querySelector('.panel-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+    
     document.body.classList.remove('panel-open');
     document.removeEventListener('click', handleClickOutside);
     currentRecord = null;
@@ -559,13 +645,32 @@ function deleteRecord(strId) {
 let objCategories = {};
 
 // Load categories from server on page load
-fetch('http://127.0.0.1:8000/api/categories')
-.then(response => response.json())
-.then(objData => {
-    objCategories = objData;
-    populateCategoryDropdowns();
-})
-.catch(error => console.error('Error loading categories:', error));
+document.addEventListener('DOMContentLoaded', () => {
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/categories`, {
+        headers: getAuthHeaders()
+    })
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = 'auth.html';
+            return;
+        }
+        return response.json();
+    })
+    .then(objData => {
+        if (objData) {
+            console.log('Loaded categories:', objData);
+            objCategories = objData || {}; // Default to empty object
+            populateCategoryDropdowns();
+        }
+    })
+    .catch(error => {
+        console.error('Error loading categories:', error);
+        objCategories = {}; // Initialize as empty object on error
+        populateCategoryDropdowns();
+    });
+});
 
 // Populate dropdown menus with available categories
 function populateCategoryDropdowns() {
@@ -583,24 +688,32 @@ function populateCategoryDropdowns() {
     
     // Add categories from JSON
     Object.keys(objCategories).forEach(strKey => {
+        const objCategory = objCategories[strKey];
+        
+        // Safety check: skip if category is invalid
+        if (!objCategory || !objCategory.name) {
+            console.warn(`Invalid category ${strKey}:`, objCategory);
+            return;
+        }
+        
         const elmOption1 = document.createElement('option');
         elmOption1.value = strKey;
-        elmOption1.textContent = objCategories[strKey].name;
+        elmOption1.textContent = objCategory.name;
         elmCategorySelect.appendChild(elmOption1);
         
         const elmOption2 = document.createElement('option');
         elmOption2.value = strKey;
-        elmOption2.textContent = objCategories[strKey].name;
+        elmOption2.textContent = objCategory.name;
         elmSearchSelect.appendChild(elmOption2);
         
         const elmOption3 = document.createElement('option');
         elmOption3.value = strKey;
-        elmOption3.textContent = objCategories[strKey].name;
+        elmOption3.textContent = objCategory.name;
         elmEditSelect.appendChild(elmOption3);
         
         const elmOption4 = document.createElement('option');
         elmOption4.value = strKey;
-        elmOption4.textContent = objCategories[strKey].name;
+        elmOption4.textContent = objCategory.name;
         elmDeleteSelect.appendChild(elmOption4);
     });
     
@@ -626,10 +739,17 @@ function renderCategoriesGrid() {
         elmGrid.innerHTML = '';
         arrCategoryKeys.forEach(strKey => {
             const objCategory = objCategories[strKey];
+            
+            // Safety check: ensure objCategory exists and has fields array
+            if (!objCategory || !objCategory.fields) {
+                console.warn(`Category ${strKey} is missing or has no fields:`, objCategory);
+                return; // Skip this category
+            }
+            
             const elmCard = document.createElement('div');
             elmCard.className = 'category-card';
             elmCard.innerHTML = `
-                <h5>${objCategory.name}</h5>
+                <h5>${objCategory.name || 'Unnamed Category'}</h5>
                 <p class="text-muted">${objCategory.fields.length} fields</p>
                 <div class="category-card-actions">
                     <button class="btn btn-sm btn-secondary" onclick="editCategory('${strKey}')">Edit</button>
@@ -703,26 +823,37 @@ function submitCategoryData() {
         objData[elmInput.name] = value;
     });
     
-    fetch('http://127.0.0.1:8000/api/collection', {
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/collection`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),  // ADD AUTH
         body: JSON.stringify(objData)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = 'auth.html';
+            return;
+        }
+        if (!response.ok) {
+            throw new Error('Failed to save data');
+        }
+        return response.json();
+    })
     .then(objResult => {
-        Swal.fire('Success!', 'Data saved successfully!', 'success');
-        elmInputs.forEach(elmInput => {
-            if (elmInput.type === 'checkbox') {
-                elmInput.checked = false;
-            } else {
-                elmInput.value = '';
-            }
-        });
-        // Don't refresh table - let user manually select category in search tab
+        if (objResult) {
+            Swal.fire('Success!', 'Data saved successfully!', 'success');
+            elmInputs.forEach(elmInput => {
+                if (elmInput.type === 'checkbox') {
+                    elmInput.checked = false;
+                } else {
+                    elmInput.value = '';
+                }
+            });
+        }
     })
     .catch(error => {
+        console.error('Error saving data:', error);
         Swal.fire('Error!', 'Error saving data: ' + error.message, 'error');
     });
 }
@@ -775,6 +906,7 @@ function cancelDeleteCategory() {
 }
 
 // Delete selected category
+// Delete selected category
 function deleteCategory() {
     const elmDeleteSelect = document.getElementById('deleteCategorySelect');
     const strCategoryKey = elmDeleteSelect.value;
@@ -796,20 +928,34 @@ function deleteCategory() {
         confirmButtonText: 'Yes, delete it!'
     }).then((objResult) => {
         if (objResult.isConfirmed) {
-            fetch(`http://127.0.0.1:8000/api/categories/${strCategoryKey}`, {
+            // Get API URL
+            const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+            
+            fetch(`${API_URL}/api/categories/${strCategoryKey}`, {
                 method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
+                headers: getAuthHeaders()  // Use auth headers
+            })
+            .then(response => {
+                if (response.status === 401 || response.status === 403) {
+                    Swal.fire('Error!', 'Your session has expired. Please log in again.', 'error');
+                    window.location.href = 'auth.html';
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('Failed to delete category');
+                }
+                return response.json();
+            })
+            .then(objResult => {
+                if (objResult) {
+                    delete objCategories[strCategoryKey];
+                    populateCategoryDropdowns();
+                    cancelDeleteCategory();
+                    Swal.fire('Deleted!', 'Category has been deleted.', 'success');
                 }
             })
-            .then(response => response.json())
-            .then(objResult => {
-                delete objCategories[strCategoryKey];
-                populateCategoryDropdowns();
-                cancelDeleteCategory();
-                Swal.fire('Deleted!', 'Category has been deleted.', 'success');
-            })
             .catch(error => {
+                console.error('Error deleting category:', error);
                 Swal.fire('Error!', 'Error deleting category: ' + error.message, 'error');
             });
         }
@@ -997,7 +1143,8 @@ function addEditField() {
 function saveEditCategory() {
     const elmEditSelect = document.getElementById('editCategorySelect');
     const strCategoryName = document.getElementById('editCategoryName').value;
-    const elmFieldDivs = document.getElementById('editCategoryFields').children;
+    const elmFieldsContainer = document.getElementById('editCategoryFields');
+    const elmFieldDivs = Array.from(elmFieldsContainer.children); // Convert to array
     
     if (!strCategoryName) {
         Swal.fire('Warning!', 'Please enter a category name', 'warning');
@@ -1005,17 +1152,17 @@ function saveEditCategory() {
     }
     
     const arrFields = [];
-    for (let elmDiv of elmFieldDivs) {
+    elmFieldDivs.forEach(elmDiv => {  // Use forEach instead
         const elmNameInput = elmDiv.querySelector('input[type="text"]');
         const elmTypeSelect = elmDiv.querySelector('select');
-        if (elmNameInput.value) {
+        if (elmNameInput && elmNameInput.value) {
             arrFields.push({
                 name: elmNameInput.value.toLowerCase().replace(/\s+/g, '_'),
                 label: elmNameInput.value,
                 type: elmTypeSelect.value
             });
         }
-    }
+    });
     
     if (arrFields.length === 0) {
         Swal.fire('Warning!', 'Please add at least one field', 'warning');
@@ -1039,23 +1186,37 @@ function saveEditCategory() {
     }).then((result) => {
         const boolMigrate = result.isConfirmed;
         
-        // Save to server
-        fetch('http://127.0.0.1:8000/api/categories', {
+        // Get API URL
+        const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+        
+        // Save to server with authentication
+        fetch(`${API_URL}/api/categories`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ key: strCategoryKey, category: objUpdatedCategory, migrate: boolMigrate })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401 || response.status === 403) {
+                Swal.fire('Error!', 'Your session has expired. Please log in again.', 'error');
+                window.location.href = 'auth.html';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('Failed to save category');
+            }
+            return response.json();
+        })
         .then(objResult => {
-            objCategories[strCategoryKey] = objUpdatedCategory;
-            populateCategoryDropdowns();
-            cancelEditCategory();
-            const strMessage = boolMigrate ? 'Category and existing items updated!' : 'Category updated!';
-            Swal.fire('Success!', strMessage, 'success');
+            if (objResult) {
+                objCategories[strCategoryKey] = objUpdatedCategory;
+                populateCategoryDropdowns();
+                cancelEditCategory();
+                const strMessage = boolMigrate ? 'Category and existing items updated!' : 'Category updated!';
+                Swal.fire('Success!', strMessage, 'success');
+            }
         })
         .catch(error => {
+            console.error('Error updating category:', error);
             Swal.fire('Error!', 'Error updating category: ' + error.message, 'error');
         });
     });
@@ -1064,7 +1225,8 @@ function saveEditCategory() {
 // Save new category to server
 function saveNewCategory() {
     const strCategoryName = document.getElementById('newCategoryName').value;
-    const elmFieldDivs = document.getElementById('newCategoryFields').children;
+    const elmFieldsContainer = document.getElementById('newCategoryFields');
+    const elmFieldDivs = Array.from(elmFieldsContainer.children); // Convert to array
     
     if (!strCategoryName) {
         Swal.fire('Warning!', 'Please enter a category name', 'warning');
@@ -1072,17 +1234,17 @@ function saveNewCategory() {
     }
     
     const arrFields = [];
-    for (let elmDiv of elmFieldDivs) {
+    elmFieldDivs.forEach(elmDiv => {  // Use forEach instead
         const elmNameInput = elmDiv.querySelector('input[type="text"]');
         const elmTypeSelect = elmDiv.querySelector('select');
-        if (elmNameInput.value) {
+        if (elmNameInput && elmNameInput.value) {
             arrFields.push({
                 name: elmNameInput.value.toLowerCase().replace(/\s+/g, '_'),
                 label: elmNameInput.value,
                 type: elmTypeSelect.value
             });
         }
-    }
+    });
     
     if (arrFields.length === 0) {
         Swal.fire('Warning!', 'Please add at least one field', 'warning');
@@ -1095,25 +1257,39 @@ function saveNewCategory() {
         fields: arrFields
     };
     
-    // Save to server
-    fetch('http://127.0.0.1:8000/api/categories', {
+    // Get API URL and auth headers
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    // Save to server with authentication
+    fetch(`${API_URL}/api/categories`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ key: strCategoryKey, category: objNewCategory })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            Swal.fire('Error!', 'Your session has expired. Please log in again.', 'error');
+            window.location.href = 'auth.html';
+            return;
+        }
+        if (!response.ok) {
+            throw new Error('Failed to save category');
+        }
+        return response.json();
+    })
     .then(objResult => {
-        objCategories[strCategoryKey] = objNewCategory;
-        populateCategoryDropdowns();
-        
-        // Clear form fields but keep form open
-        document.getElementById('newCategoryName').value = '';
-        document.getElementById('newCategoryFields').innerHTML = '';
-        Swal.fire('Success!', 'Category saved successfully!', 'success');
+        if (objResult) {
+            objCategories[strCategoryKey] = objNewCategory;
+            populateCategoryDropdowns();
+            
+            // Clear form fields but keep form open
+            document.getElementById('newCategoryName').value = '';
+            document.getElementById('newCategoryFields').innerHTML = '';
+            Swal.fire('Success!', 'Category saved successfully!', 'success');
+        }
     })
     .catch(error => {
+        console.error('Error saving category:', error);
         Swal.fire('Error!', 'Error saving category: ' + error.message, 'error');
     });
 }
@@ -1130,10 +1306,28 @@ function filterByCategory() {
         return;
     }
     
-    // Fetch and filter data by category
-    fetch('http://127.0.0.1:8000/api/collection')
-    .then(response => response.json())
+    // Get API URL
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    // Fetch and filter data by category WITH AUTH
+    fetch(`${API_URL}/api/collection`, {
+        headers: getAuthHeaders()  // ADD THIS
+    })
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            window.location.href = 'auth.html';
+            return;
+        }
+        if (!response.ok) {
+            throw new Error('Failed to fetch data');
+        }
+        return response.json();
+    })
     .then(arrData => {
+        if (!arrData) return;  // Handle undefined response
+        
         // Filter data by exact category match
         const arrFilteredData = arrData.filter(objItem => {
             return objItem.category === strSelectedCategory;
@@ -1143,6 +1337,7 @@ function filterByCategory() {
     })
     .catch(error => {
         console.error('Error fetching data:', error);
+        Swal.fire('Error!', 'Error loading data: ' + error.message, 'error');
     });
 }
 
@@ -1156,19 +1351,26 @@ let objUserSettings = { darkMode: false, theme: 'default', language: 'en' };
 
 // Load settings from server
 function loadSettings() {
-    fetch('http://127.0.0.1:8000/api/settings')
-    .then(response => response.json())
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/settings`, {
+        headers: getAuthHeaders()  // ADD AUTH
+    })
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            // Don't redirect on settings failure, just use defaults
+            return null;
+        }
+        return response.json();
+    })
     .then(objSettings => {
-        objUserSettings = objSettings;
+        if (objSettings) {
+            objUserSettings = objSettings;
+        }
         applySettings();
     })
     .catch(error => {
         console.error('Error loading settings:', error);
-        // Fallback to localStorage for web version
-        const strDarkMode = localStorage.getItem('darkMode');
-        if (strDarkMode === 'enabled') {
-            objUserSettings.darkMode = true;
-        }
         applySettings();
     });
 }
@@ -1208,17 +1410,15 @@ function applySettings() {
 
 // Save settings to server
 function saveSettings() {
-    fetch('http://127.0.0.1:8000/api/settings', {
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/settings`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),  // ADD AUTH
         body: JSON.stringify(objUserSettings)
     })
     .catch(error => {
         console.error('Error saving settings:', error);
-        // Fallback to localStorage for web version
-        localStorage.setItem('darkMode', objUserSettings.darkMode ? 'enabled' : 'disabled');
     });
 }
 
@@ -1243,9 +1443,21 @@ function toggleDarkMode() {
 
 // Export data
 function exportData() {
-    fetch('http://127.0.0.1:8000/api/collection')
-    .then(response => response.json())
+    const API_URL = window.APP_CONFIG ? window.APP_CONFIG.API_URL : 'http://127.0.0.1:8000';
+    
+    fetch(`${API_URL}/api/collection`, {
+        headers: getAuthHeaders()  // ADD AUTH
+    })
+    .then(response => {
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = 'auth.html';
+            return;
+        }
+        return response.json();
+    })
     .then(arrData => {
+        if (!arrData) return;
+        
         const objExport = {
             categories: objCategories,
             items: arrData,
@@ -1266,6 +1478,7 @@ function exportData() {
         Swal.fire('Success!', 'Data exported successfully!', 'success');
     })
     .catch(error => {
+        console.error('Error exporting data:', error);
         Swal.fire('Error!', 'Error exporting data: ' + error.message, 'error');
     });
 }

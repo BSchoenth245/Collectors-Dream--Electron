@@ -215,12 +215,12 @@ td {
 
 /* Bootstrap Tab Overrides */
 .nav-tabs {
-    border-bottom-color: var(--secondary-color);
+    border-bottom: 1px solid #000000 !important;  /* Black bottom border */
 }
 
 .nav-tabs .nav-link {
     color: var(--secondary-color);
-    border-color: transparent;
+    border: 1px solid transparent !important;
     background: transparent;
     transition: all 0.3s ease;
 }
@@ -234,7 +234,8 @@ td {
 .nav-tabs .nav-link.active {
     color: var(--primary-color);
     background: var(--background-white);
-    border-color: var(--secondary-color) var(--secondary-color) var(--background-white);
+    border-color: #000000 #000000 transparent !important;  /* Top and sides black, bottom transparent */
+    border-bottom-color: transparent !important;
     font-weight: 600;
 }
 
@@ -491,8 +492,8 @@ input[type="checkbox"], input[type="radio"] {
 .tab-content {
     padding: 20px;
     background: var(--card-gradient);
-    border: 1px solid var(--border-light);
-    border-top: none;
+    border: 1px solid #000000 !important;  /* Black border all around */
+    border-top: none !important;  /* Remove top border (tabs handle that) */
     border-radius: 0 0 12px 12px;
     box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
 }
@@ -946,9 +947,9 @@ body.dark-mode .dataTables_wrapper .dataTables_filter label {
     right: -400px;
     width: 400px;
     height: 100vh;
-    background: linear-gradient(180deg, var(--card-gradient) 0%, var(--secondary-gradient) 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); /* Solid background */
     border-left: 3px solid var(--secondary-color);
-    box-shadow: -4px 0 12px var(--secondary-color);
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
     transition: right 0.3s ease;
     z-index: 1050;
     overflow-y: auto;
@@ -1053,7 +1054,7 @@ body.dark-mode .dataTables_wrapper .dataTables_filter label {
 
 /* Dark mode overrides for slide panel */
 body.dark-mode .slide-panel {
-    background: var(--card-gradient);
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); /* Solid dark background */
     border-left-color: var(--border-light);
 }
 
@@ -1062,11 +1063,11 @@ body.dark-mode .slide-panel-header {
 }
 
 body.dark-mode .slide-panel-footer {
-    background: var(--background-light);
+    background: #0f172a; /* Solid dark background */
     border-top-color: var(--border-light);
 }
 
 body.dark-mode .field-display {
-    background: var(--background-white);
+    background: #0f172a; /* Solid dark background */
     border-color: var(--border-light);
 }
