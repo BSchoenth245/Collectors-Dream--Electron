@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "collectors-dream",
-  "version": "1.1.91",
-  "description": "A database management system for collectors",
+  "version": "1.2.0",
+  "description": "A cloud-connected database management system for collectors",
   "main": "main.js",
   "scripts": {
     "start": "node start-app.js",
@@ -12,7 +12,8 @@
     "build": "electron-builder --win --linux --publish=never",
     "build-win": "electron-builder --win --publish=never",
     "build-linux": "electron-builder --linux --publish=never",
-    "release": "electron-builder --win --linux --publish=always"
+    "release": "electron-builder --win --linux --publish=always",
+    "generate-jwt-secret": "node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\""
   },
   "author": {
     "name": "Brock Schoenthlaer",
@@ -21,10 +22,13 @@
   "homepage": "https://github.com/BSchoenth245/Collectors-Dream",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
     "electron-log": "^4.4.8",
     "electron-updater": "^6.1.0",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.8.7"
   },
   "devDependencies": {
@@ -39,22 +43,31 @@
     },
     "files": [
       "main.js",
-      "server.js",
+      "server-updated.js",
       "updater.js",
       "mongo-installer.js",
       "index.html",
+      "auth.html",
+      "migrate.html",
       "mongo-wizard.html",
       "app.js",
+      "auth.js",
+      "migrate.js",
+      "config.js",
       "i18n.js",
       "styles.css",
       "locales/**/*",
       "assets/colored-logo.png",
+      "models/**/*",
+      "middleware/**/*",
       "node_modules/**/*",
       "!node_modules/**/test/**/*",
       "!node_modules/**/tests/**/*",
       "!node_modules/**/*.md",
       "!node_modules/**/LICENSE*",
       "!node_modules/**/CHANGELOG*",
+      "!.env",
+      "!.env.example",
       "!categories.json",
       "!settings.json",
       "!data/**/*",
@@ -82,8 +95,6 @@
       "category": "Utility",
       "artifactName": "${productName}-${version}.${ext}"
     },
-
-
     "compression": "store",
     "nsis": {
       "oneClick": false,
