@@ -10,15 +10,15 @@ const config = {
             
             // Local development or desktop app pointing to local server
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                return 'http://127.0.0.1:8000';
+                return 'http://127.0.0.1:8001';
             }
             
             // Production web app - use whatever domain/IP the user is visiting
-            return `http://${hostname}:8000`;
+            return `http://${hostname}:8001`;
         }
         
         // Fallback for Node.js environments (shouldn't normally be used)
-        return 'http://127.0.0.1:8000';
+        return 'http://127.0.0.1:8001';
     })()
 };
 
